@@ -7,6 +7,8 @@ from tests.support.database import assert_safe_test_database
 
 NORMAL_DATABASE_URL = os.environ.get("DATABASE_URL")
 os.environ["APP_ENV"] = "test"
+os.environ["ALLOWED_HOSTS"] = "testserver"
+os.environ["FORWARDED_ALLOW_IPS"] = "127.0.0.1"
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
     "sqlite+pysqlite:///:memory:",

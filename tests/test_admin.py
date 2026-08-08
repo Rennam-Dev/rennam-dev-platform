@@ -4,6 +4,8 @@ import re
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from httpx import Response
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -148,10 +150,13 @@ def test_login_is_public_without_redirect_loop_and_public_site_stays_public(clie
 def test_authenticated_admin_routes_and_logout(client):
     login(client)
 
-    assert client.get("/admin").status_code == 200
-    assert client.get("/admin/projetos/novo").status_code == 200
-
     dashboard = client.get("/admin")
+    new_project = client.get("/admin/projetos/novo")
+    assert dashboard.status_code == 200
+    assert new_project.status_code == 200
+    assert dashboard.headers["cache-control"] == "no-store"
+    assert new_project.headers["cache-control"] == "no-store"
+
     logout_response = client.post(
         "/admin/logout",
         data={"csrf_token": csrf_from(dashboard)},
@@ -410,7 +415,7 @@ def test_valid_login_outside_block_and_success_resets_failures(client):
         assert login_attempt(client, password="wrong-password").status_code == 401
 
 
-def test_different_remote_ips_do_not_share_the_limit():
+def test_different_remote_ips_do_not_share_the_limit() -> None:
     with (
         TestClient(app, client=("192.0.2.10", 50000)) as first_client,
         TestClient(app, client=("198.51.100.20", 50001)) as second_client,
@@ -425,6 +430,89 @@ def test_different_remote_ips_do_not_share_the_limit():
         assert (
             login_attempt(second_client, password="test-password").status_code == 303
         )
+
+
+def test_forwarded_headers_from_untrusted_origin_do_not_change_identity() -> None:
+    proxy_guarded_app = ProxyHeadersMiddleware(
+        app,
+        trusted_hosts=settings.forwarded_allow_ips,
+    )
+    with TestClient(
+        proxy_guarded_app,
+        client=("192.0.2.30", 50000),
+    ) as spoofing_client:
+        login_page = spoofing_client.get("/admin/login")
+        csrf_token = csrf_from(login_page)
+        for attempt in range(settings.admin_login_max_failures):
+            response = spoofing_client.post(
+                "/admin/login",
+                data={
+                    "csrf_token": csrf_token,
+                    "username": "rennam",
+                    "password": "wrong-password",
+                },
+                headers={
+                    "Forwarded": f"for=203.0.113.{attempt + 1}",
+                    "X-Forwarded-For": f"203.0.113.{attempt + 1}",
+                    "X-Forwarded-Proto": "https",
+                    "X-Real-IP": f"198.51.100.{attempt + 1}",
+                },
+                follow_redirects=False,
+            )
+            assert response.status_code == 401
+
+        limited = spoofing_client.post(
+            "/admin/login",
+            data={
+                "csrf_token": csrf_token,
+                "username": "rennam",
+                "password": "test-password",
+            },
+            headers={
+                "Forwarded": "for=203.0.113.250",
+                "X-Forwarded-For": "203.0.113.250",
+                "X-Forwarded-Proto": "https",
+                "X-Real-IP": "198.51.100.250",
+            },
+            follow_redirects=False,
+        )
+
+    assert limited.status_code == 429
+
+
+def test_rate_limiter_uses_ip_supplied_by_trusted_proxy() -> None:
+    proxied_app = ProxyHeadersMiddleware(
+        app,
+        trusted_hosts="192.0.2.0/24",
+    )
+    forwarded_client = "203.0.113.10"
+    other_forwarded_client = "198.51.100.20"
+    with TestClient(
+        proxied_app,
+        client=("192.0.2.10", 50000),
+    ) as proxy_client:
+        csrf_token = csrf_from(proxy_client.get("/admin/login"))
+
+        def attempt(password: str, forwarded_for: str) -> Response:
+            return proxy_client.post(
+                "/admin/login",
+                data={
+                    "csrf_token": csrf_token,
+                    "username": "rennam",
+                    "password": password,
+                },
+                headers={
+                    "X-Forwarded-For": forwarded_for,
+                    "X-Forwarded-Proto": "https",
+                },
+                follow_redirects=False,
+            )
+
+        for _ in range(settings.admin_login_max_failures):
+            assert attempt("wrong-password", forwarded_client).status_code == 401
+
+        assert attempt("test-password", forwarded_client).status_code == 429
+        assert attempt("test-password", other_forwarded_client).status_code == 303
 
 
 def test_login_audit_events_are_sanitized(client, caplog):

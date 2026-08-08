@@ -1,10 +1,11 @@
 import re
 from functools import lru_cache
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -14,6 +15,10 @@ POSTGRESQL_SCHEMES = {"postgresql", "postgresql+psycopg"}
 ARGON2_HASH_PATTERN = re.compile(
     r"^\$argon2(?:id|i|d)\$v=19\$m=\d+,t=\d+,p=\d+"
     r"\$[A-Za-z0-9+/]+={0,2}\$[A-Za-z0-9+/]+={0,2}$"
+)
+HOSTNAME_PATTERN = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)"
+    r"(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
 )
 AppEnvironment = Literal["development", "test", "staging", "production"]
 
@@ -31,6 +36,8 @@ class Settings(BaseSettings):
     admin_login_max_failures: int = 5
     admin_login_window_seconds: int = 10 * 60
     admin_login_max_clients: int = 10_000
+    allowed_hosts: str = "127.0.0.1,localhost,testserver"
+    forwarded_allow_ips: str = "127.0.0.1"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
@@ -38,6 +45,60 @@ class Settings(BaseSettings):
         extra="ignore",
         hide_input_in_errors=True,
     )
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def validate_allowed_hosts(cls, value: str) -> str:
+        hosts = [item.strip().lower() for item in value.split(",")]
+        if not hosts or any(not host for host in hosts):
+            raise ValueError("ALLOWED_HOSTS deve conter hosts explícitos")
+        for host in hosts:
+            if host == "*" or host.startswith("*."):
+                raise ValueError("ALLOWED_HOSTS não permite wildcard")
+            try:
+                parsed_host = ip_address(host)
+            except ValueError as error:
+                if not HOSTNAME_PATTERN.fullmatch(host):
+                    raise ValueError(
+                        "ALLOWED_HOSTS contém host inválido"
+                    ) from error
+            else:
+                if parsed_host.version == 6:
+                    raise ValueError(
+                        "ALLOWED_HOSTS não suporta IPv6 literal"
+                    )
+        return ",".join(dict.fromkeys(hosts))
+
+    @field_validator("forwarded_allow_ips")
+    @classmethod
+    def validate_forwarded_allow_ips(cls, value: str) -> str:
+        networks = [item.strip() for item in value.split(",")]
+        if not networks or any(not network for network in networks):
+            raise ValueError(
+                "FORWARDED_ALLOW_IPS deve conter IPs ou redes explícitas"
+            )
+        if "*" in networks:
+            raise ValueError("FORWARDED_ALLOW_IPS não permite confiança global")
+        for network in networks:
+            if "/" in network:
+                try:
+                    parsed_network = ip_network(network)
+                except ValueError as error:
+                    raise ValueError(
+                        "FORWARDED_ALLOW_IPS contém IP ou rede inválida"
+                    ) from error
+                if parsed_network.prefixlen == 0:
+                    raise ValueError(
+                        "FORWARDED_ALLOW_IPS não permite confiança global"
+                    )
+                continue
+            try:
+                ip_address(network)
+            except ValueError as error:
+                raise ValueError(
+                    "FORWARDED_ALLOW_IPS contém IP ou rede inválida"
+                ) from error
+        return ",".join(dict.fromkeys(networks))
 
     @model_validator(mode="after")
     def validate_production_configuration(self) -> Self:
@@ -98,6 +159,11 @@ class Settings(BaseSettings):
         if not self.admin_username.strip():
             raise ValueError("ADMIN_USERNAME não pode ser vazio em production")
 
+        if site_url.hostname not in self.allowed_host_list:
+            raise ValueError(
+                "ALLOWED_HOSTS deve incluir o host de SITE_URL em production"
+            )
+
         self.admin_username = self.admin_username.strip()
         self.site_url = self.site_url.rstrip("/")
         return self
@@ -109,6 +175,10 @@ class Settings(BaseSettings):
     @property
     def session_cookie_secure(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def allowed_host_list(self) -> list[str]:
+        return self.allowed_hosts.split(",")
 
 
 @lru_cache

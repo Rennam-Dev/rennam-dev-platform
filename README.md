@@ -179,8 +179,9 @@ alembic upgrade head
 - O Markdown é sanitizado antes de ser exibido.
 - Imagens serão armazenadas em object storage; o banco guardará somente URLs e
   metadados.
-- Antes do deploy público, adicione limitação de tentativas no login e revise
-  headers de segurança no proxy.
+- Antes do deploy público, configure `ALLOWED_HOSTS`, restrinja
+  `FORWARDED_ALLOW_IPS` ao proxy controlado e publique production somente por
+  HTTPS.
 
 ## Próximas versões
 

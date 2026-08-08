@@ -22,6 +22,7 @@ def production_settings(**overrides: str) -> Settings:
         "admin_username": "admin",
         "admin_password_hash": VALID_ARGON2_HASH,
         "site_url": "https://rennam.example/",
+        "allowed_hosts": "rennam.example",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -52,6 +53,8 @@ def test_development_defaults_remain_available(monkeypatch: pytest.MonkeyPatch) 
         "ADMIN_USERNAME",
         "ADMIN_PASSWORD_HASH",
         "SITE_URL",
+        "ALLOWED_HOSTS",
+        "FORWARDED_ALLOW_IPS",
     ):
         monkeypatch.delenv(variable, raising=False)
 
@@ -61,6 +64,8 @@ def test_development_defaults_remain_available(monkeypatch: pytest.MonkeyPatch) 
     assert configured.database_url == "sqlite+pysqlite:///./rennam-dev.db"
     assert configured.session_secret == DEFAULT_SESSION_SECRET
     assert configured.session_cookie_secure is False
+    assert configured.allowed_host_list == ["127.0.0.1", "localhost", "testserver"]
+    assert configured.forwarded_allow_ips == "127.0.0.1"
 
 
 @pytest.mark.parametrize(
@@ -123,6 +128,74 @@ def test_valid_production_configuration_is_accepted() -> None:
     assert configured.is_production is True
     assert configured.session_cookie_secure is True
     assert configured.site_url == "https://rennam.example"
+    assert configured.allowed_host_list == ["rennam.example"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_message"),
+    [
+        ("allowed_hosts", "*", "ALLOWED_HOSTS não permite wildcard"),
+        (
+            "allowed_hosts",
+            "https://rennam.example",
+            "ALLOWED_HOSTS contém host inválido",
+        ),
+        (
+            "allowed_hosts",
+            "::1",
+            "ALLOWED_HOSTS não suporta IPv6 literal",
+        ),
+        (
+            "forwarded_allow_ips",
+            "*",
+            "FORWARDED_ALLOW_IPS não permite confiança global",
+        ),
+        (
+            "forwarded_allow_ips",
+            "0.0.0.0/0",
+            "FORWARDED_ALLOW_IPS não permite confiança global",
+        ),
+        (
+            "forwarded_allow_ips",
+            "::/0",
+            "FORWARDED_ALLOW_IPS não permite confiança global",
+        ),
+        (
+            "forwarded_allow_ips",
+            "proxy.example",
+            "FORWARDED_ALLOW_IPS contém IP ou rede inválida",
+        ),
+        (
+            "forwarded_allow_ips",
+            "10.0.0.7/24",
+            "FORWARDED_ALLOW_IPS contém IP ou rede inválida",
+        ),
+    ],
+)
+def test_unsafe_http_boundary_configuration_is_rejected(
+    field: str,
+    value: str,
+    expected_message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=expected_message):
+        Settings(_env_file=None, **{field: value})
+
+
+def test_production_requires_site_host_in_allowed_hosts() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="ALLOWED_HOSTS deve incluir o host de SITE_URL em production",
+    ):
+        production_settings(allowed_hosts="other.example")
+
+
+def test_forwarded_proxy_networks_match_uvicorn_input_format() -> None:
+    configured = Settings(
+        forwarded_allow_ips=" 127.0.0.1,10.0.0.0/24,10.0.0.0/24 ",
+        _env_file=None,
+    )
+
+    assert configured.forwarded_allow_ips == "127.0.0.1,10.0.0.0/24"
 
 
 def test_validation_error_does_not_expose_secrets() -> None:
