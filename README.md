@@ -110,8 +110,9 @@ Acesse:
 
 ## Desenvolvimento sem Docker
 
-Use Python 3.12 ou 3.13. A base evita Python 3.14 por enquanto para reduzir
-atrito com dependências que ainda possam estar amadurecendo.
+Python 3.12 é a versão oficial do projeto, registrada em `.python-version`, no
+Dockerfile da aplicação e na imagem de validação. Outras versões não fazem
+parte da matriz validada da v0.2.1.
 
 ```bash
 python -m venv .venv
@@ -130,12 +131,32 @@ PostgreSQL.
 ## Comandos úteis
 
 ```bash
+make verify
 make migrate
 make seed
 make run
 make test
 make lint
 ```
+
+`make verify` é a entrada reproduzível recomendada. Ela não lê o `.env` da
+aplicação: constrói uma imagem Python 3.12 com as dependências declaradas e as
+versões validadas em `requirements-test.lock`, sobe um PostgreSQL 16 efêmero
+chamado `rennam_test`, executa Ruff, os testes puros, a suíte completa e o ciclo
+Alembic `upgrade head`, `downgrade base`, `upgrade head`. Ao terminar, inclusive
+em caso de erro, remove somente os containers e recursos do projeto Compose
+`rennam-dev-test`.
+
+Para inspecionar apenas a disponibilidade do PostgreSQL descartável:
+
+```bash
+make test-db-up
+make test-db-down
+```
+
+O serviço de teste não publica porta no host, usa credenciais fictícias próprias
+e armazena os dados em `tmpfs`; ele não compartilha o volume `postgres_data` do
+ambiente de desenvolvimento.
 
 Nova migration:
 

@@ -2,6 +2,8 @@ import pytest
 
 from tests.support.database import assert_safe_test_database
 
+pytestmark = pytest.mark.no_database
+
 
 @pytest.mark.parametrize(
     "url",
