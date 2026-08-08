@@ -25,7 +25,11 @@ from app.main import app  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def reset_database():
+def reset_database(request: pytest.FixtureRequest):
+    if request.node.get_closest_marker("no_database"):
+        yield
+        return
+
     assert_safe_test_database(
         TEST_DATABASE_URL,
         settings.app_env,

@@ -7,9 +7,6 @@ from app.routes import admin, public
 
 
 def create_app() -> FastAPI:
-    if settings.is_production and settings.uses_insecure_session_secret:
-        raise RuntimeError("Defina SESSION_SECRET antes de iniciar em produção.")
-
     application = FastAPI(
         title="rennam.dev",
         description="Portfólio técnico e mini-CMS autoral.",
@@ -23,7 +20,7 @@ def create_app() -> FastAPI:
         session_cookie="rennam_session",
         max_age=60 * 60 * 8,
         same_site="lax",
-        https_only=settings.is_production,
+        https_only=settings.session_cookie_secure,
     )
     application.mount(
         "/static", StaticFiles(directory=BASE_DIR / "static"), name="static"

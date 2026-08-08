@@ -147,7 +147,12 @@ alembic upgrade head
 ## Regras de segurança
 
 - Nunca comite `.env`.
-- Em produção, `APP_ENV=production` e `SESSION_SECRET` devem ser obrigatórios.
+- `APP_ENV` aceita somente `development`, `test`, `staging` ou `production`,
+  sem variações de caixa ou espaços.
+- Em produção, a aplicação exige no startup: `SESSION_SECRET` com pelo menos
+  32 caracteres e diferente do default, `ADMIN_PASSWORD_HASH` em formato
+  Argon2, `ADMIN_USERNAME` não vazio, PostgreSQL em `DATABASE_URL` e
+  `SITE_URL` HTTPS sem query string ou fragment.
 - O painel usa sessão, não JWT, porque é uma aplicação renderizada no servidor.
 - O Markdown é sanitizado antes de ser exibido.
 - Imagens serão armazenadas em object storage; o banco guardará somente URLs e
