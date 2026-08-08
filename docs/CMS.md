@@ -35,4 +35,7 @@ Título, resumo, problema, objetivo, solução, arquitetura, fluxo de dados, tec
 - Traduções podem ter estados diferentes.
 - Na v0.2.1, o slug de todo projeto é imutável após a criação para preservar URLs.
 - Uma versão futura com histórico e redirects permitirá renomeação segura de slug.
+- Hard delete de projetos está desabilitado na v0.2.1 para evitar perda
+  irreversível e quebra de URLs.
+- Arquivamento, soft delete e restauração serão projetados em versão futura.
 - Rascunhos e previews nunca aparecem publicamente ou no sitemap.

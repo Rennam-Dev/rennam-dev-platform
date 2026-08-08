@@ -279,6 +279,83 @@ def test_project_edit_still_requires_csrf(client):
     assert response.status_code == 403
 
 
+@pytest.mark.parametrize("visibility", ["draft", "published"])
+def test_manual_delete_is_blocked_and_project_is_preserved(
+    client, caplog, visibility
+):
+    login(client)
+    project_id = create_project(client, visibility=visibility)
+    edit_page = client.get(f"/admin/projetos/{project_id}/editar")
+    assert "/excluir" not in edit_page.text
+    assert "Exclusão definitiva desabilitada" in edit_page.text
+    assert "Arquivamento e restauração" in edit_page.text
+    caplog.set_level(logging.WARNING, logger="rennam.admin_projects")
+
+    response = client.post(
+        f"/admin/projetos/{project_id}/excluir",
+        data={"csrf_token": csrf_from(edit_page)},
+        follow_redirects=False,
+    )
+    assert response.status_code == 409
+    assert "Exclusão definitiva está desabilitada" in response.text
+
+    with SessionLocal() as db:
+        project = db.get(Project, project_id)
+        assert project is not None
+        assert project.slug == "rennam-semantic-docs"
+        assert {technology.name for technology in project.technologies} == {
+            "Python",
+            "FastAPI",
+            "pgvector",
+        }
+
+    expected_public_status = 200 if visibility == "published" else 404
+    assert (
+        client.get("/projetos/rennam-semantic-docs").status_code
+        == expected_public_status
+    )
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "rennam.admin_projects"
+    ]
+    assert len(records) == 1
+    assert records[0].event == "admin_project_delete_denied"
+    assert records[0].project_id == project_id
+    assert records[0].result == "denied"
+
+
+def test_project_delete_requires_auth_and_preserves_project(client):
+    login(client)
+    project_id = create_project(client)
+    edit_page = client.get(f"/admin/projetos/{project_id}/editar")
+    csrf_token = csrf_from(edit_page)
+    client.cookies.clear()
+
+    response = client.post(
+        f"/admin/projetos/{project_id}/excluir",
+        data={"csrf_token": csrf_token},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/login"
+    with SessionLocal() as db:
+        assert db.get(Project, project_id) is not None
+
+
+def test_project_delete_requires_valid_csrf_and_preserves_project(client):
+    login(client)
+    project_id = create_project(client)
+    response = client.post(
+        f"/admin/projetos/{project_id}/excluir",
+        data={"csrf_token": "invalid-csrf-token"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+    with SessionLocal() as db:
+        assert db.get(Project, project_id) is not None
+
+
 def test_csrf_is_required(client):
     login(client)
     response = client.post(

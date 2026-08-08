@@ -29,6 +29,7 @@ router = APIRouter(prefix="/admin")
 DBSession = Annotated[Session, Depends(get_db)]
 AdminAccess = Annotated[None, Depends(require_admin)]
 logger = logging.getLogger("rennam.admin_auth")
+project_logger = logging.getLogger("rennam.admin_projects")
 login_rate_limiter = LoginRateLimiter(
     max_failures=settings.admin_login_max_failures,
     window_seconds=settings.admin_login_window_seconds,
@@ -345,6 +346,30 @@ async def remove_project(
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
     project = project_repository.get_by_id(db, project_id)
-    if project:
+    if project is None:
+        return RedirectResponse("/admin", status_code=303)
+    try:
         project_service.delete_project(db, project)
-    return RedirectResponse("/admin", status_code=303)
+    except project_service.ProjectDeletionDisabledError as error:
+        project_logger.warning(
+            "admin_project_delete_denied",
+            extra={
+                "event": "admin_project_delete_denied",
+                "project_id": project.id,
+                "path": request.url.path,
+                "result": "denied",
+            },
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/project_form.html",
+            context=admin_context(
+                request,
+                page_title=f"Editar: {project.title}",
+                action=f"/admin/projetos/{project.id}/editar",
+                values=form_values(project),
+                errors=[str(error)],
+                project=project,
+            ),
+            status_code=409,
+        )

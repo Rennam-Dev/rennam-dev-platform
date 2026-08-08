@@ -12,6 +12,10 @@ class ProjectSlugImmutableError(ValueError):
     pass
 
 
+class ProjectDeletionDisabledError(RuntimeError):
+    pass
+
+
 def slugify(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
@@ -69,5 +73,7 @@ def update_project(db: Session, project: Project, form: ProjectForm) -> Project:
 
 
 def delete_project(db: Session, project: Project) -> None:
-    db.delete(project)
-    db.commit()
+    raise ProjectDeletionDisabledError(
+        "Exclusão definitiva está desabilitada na v0.2.1. "
+        "Arquivamento e restauração serão implementados futuramente."
+    )

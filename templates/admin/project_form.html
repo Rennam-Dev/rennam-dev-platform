@@ -61,10 +61,8 @@
 </form>
 
 {% if project %}
-<form class="danger-zone" action="/admin/projetos/{{ project.id }}/excluir" method="post" onsubmit="return confirm('Excluir este projeto permanentemente?')">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <div><strong>Zona de risco</strong><p>A exclusão é permanente.</p></div>
-  <button type="submit">Excluir projeto</button>
-</form>
+<div class="danger-zone">
+  <div><strong>Exclusão definitiva desabilitada</strong><p>Para evitar perda irreversível e URLs quebradas, projetos não podem ser removidos nesta versão. Arquivamento e restauração serão implementados futuramente.</p></div>
+</div>
 {% endif %}
 {% endblock %}

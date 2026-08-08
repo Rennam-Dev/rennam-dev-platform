@@ -4,8 +4,9 @@ Portfólio técnico e mini-CMS autoral construído com FastAPI, Jinja2,
 PostgreSQL, SQLAlchemy e Alembic.
 
 O site público apresenta projetos como estudos de caso. O painel privado em
-`/admin` permite cadastrar, editar, publicar, destacar e excluir projetos sem
-alterar dicionários Python ou refazer o deploy do código.
+`/admin` permite cadastrar, editar, publicar e destacar projetos sem alterar
+dicionários Python ou refazer o deploy do código. A exclusão definitiva está
+temporariamente desabilitada até existir arquivamento e restauração seguros.
 
 ## O que já existe nesta base
 
