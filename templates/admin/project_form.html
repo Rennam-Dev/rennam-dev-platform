@@ -18,7 +18,7 @@
     <div><span>01</span><h2>Identidade</h2><p>O que aparece nos cards e na URL.</p></div>
     <div class="form-grid">
       <label class="span-2">Título<input name="title" value="{{ values.title }}" minlength="3" maxlength="160" required></label>
-      <label>Slug<input name="slug" value="{{ values.slug }}" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="busca-semantica" required></label>
+      <label>Slug<input name="slug" value="{{ values.slug }}" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="busca-semantica" required{% if project %} readonly aria-describedby="slug-help"{% endif %}>{% if project %}<small id="slug-help">Imutável após a criação para preservar a URL. Renomeação segura dependerá de redirects futuros.</small>{% endif %}</label>
       <label>Status<select name="status">
         {% for value, label in [("planned","Planejado"),("building","Em desenvolvimento"),("complete","Concluído")] %}
         <option value="{{ value }}" {% if values.status == value %}selected{% endif %}>{{ label }}</option>

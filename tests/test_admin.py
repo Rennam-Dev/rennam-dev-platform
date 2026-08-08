@@ -1,12 +1,15 @@
 import logging
 import re
 
+import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
+from app.core.database import SessionLocal
 from app.core.security import require_admin
 from app.main import app
+from app.models import Project
 from app.routes import admin as admin_routes
 
 
@@ -41,6 +44,41 @@ def login_attempt(client, *, password: str, username: str = "rennam"):
         },
         follow_redirects=False,
     )
+
+
+def project_data(
+    csrf_token: str,
+    *,
+    slug: str = "rennam-semantic-docs",
+    title: str = "Rennam Semantic Docs",
+    summary: str = "Busca semântica em documentos com fontes verificáveis.",
+    visibility: str = "published",
+) -> dict[str, str]:
+    return {
+        "csrf_token": csrf_token,
+        "title": title,
+        "slug": slug,
+        "summary": summary,
+        "status": "building",
+        "visibility": visibility,
+        "technologies": "Python, FastAPI, pgvector",
+    }
+
+
+def create_project(client, *, visibility: str = "published") -> int:
+    form_page = client.get("/admin/projetos/novo")
+    response = client.post(
+        "/admin/projetos/novo",
+        data=project_data(csrf_from(form_page), visibility=visibility),
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    match = re.fullmatch(
+        r"/admin/projetos/(\d+)/editar\?saved=1",
+        response.headers["location"],
+    )
+    assert match
+    return int(match.group(1))
 
 
 PROTECTED_ADMIN_ROUTES = {
@@ -129,27 +167,116 @@ def test_authenticated_admin_routes_and_logout(client):
 
 def test_admin_can_create_project(client):
     login(client)
-    form_page = client.get("/admin/projetos/novo")
-    response = client.post(
-        "/admin/projetos/novo",
-        data={
-            "csrf_token": csrf_from(form_page),
-            "title": "Rennam Semantic Docs",
-            "slug": "rennam-semantic-docs",
-            "summary": "Busca semântica em documentos com fontes verificáveis.",
-            "status": "building",
-            "visibility": "published",
-            "featured": "on",
-            "technologies": "Python, FastAPI, pgvector",
-        },
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
+    create_page = client.get("/admin/projetos/novo")
+    slug_input = re.search(r'<input name="slug"[^>]*>', create_page.text)
+    assert slug_input
+    assert "readonly" not in slug_input.group()
+    create_project(client)
 
     public_page = client.get("/projetos/rennam-semantic-docs")
     assert public_page.status_code == 200
     assert "Rennam Semantic Docs" in public_page.text
     assert "pgvector" in public_page.text
+
+
+def test_admin_can_update_project_while_preserving_slug(client):
+    login(client)
+    project_id = create_project(client)
+    edit_page = client.get(f"/admin/projetos/{project_id}/editar")
+    slug_input = re.search(r'<input name="slug"[^>]*>', edit_page.text)
+    assert slug_input
+    assert "readonly" in slug_input.group()
+    assert "Imutável após a criação" in edit_page.text
+
+    response = client.post(
+        f"/admin/projetos/{project_id}/editar",
+        data=project_data(
+            csrf_from(edit_page),
+            title="Rennam Semantic Docs atualizado",
+            summary="Resumo atualizado sem alterar a URL pública original.",
+        ),
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    with SessionLocal() as db:
+        project = db.get(Project, project_id)
+        assert project is not None
+        assert project.slug == "rennam-semantic-docs"
+        assert project.title == "Rennam Semantic Docs atualizado"
+        assert project.summary == (
+            "Resumo atualizado sem alterar a URL pública original."
+        )
+
+    public_page = client.get("/projetos/rennam-semantic-docs")
+    assert public_page.status_code == 200
+    assert "Rennam Semantic Docs atualizado" in public_page.text
+
+
+@pytest.mark.parametrize("visibility", ["draft", "published"])
+def test_manual_slug_change_is_rejected_without_partial_update(client, visibility):
+    login(client)
+    project_id = create_project(client, visibility=visibility)
+    edit_page = client.get(f"/admin/projetos/{project_id}/editar")
+
+    response = client.post(
+        f"/admin/projetos/{project_id}/editar",
+        data=project_data(
+            csrf_from(edit_page),
+            slug="url-adulterada",
+            title="Título não deve ser persistido",
+            summary="Resumo não deve ser persistido após adulteração do slug.",
+            visibility=visibility,
+        ),
+        follow_redirects=False,
+    )
+    assert response.status_code == 422
+    assert "não pode ser alterado após a criação" in response.text
+
+    with SessionLocal() as db:
+        project = db.get(Project, project_id)
+        assert project is not None
+        assert project.slug == "rennam-semantic-docs"
+        assert project.title == "Rennam Semantic Docs"
+        assert project.summary == (
+            "Busca semântica em documentos com fontes verificáveis."
+        )
+
+    expected_original_status = 200 if visibility == "published" else 404
+    assert (
+        client.get("/projetos/rennam-semantic-docs").status_code
+        == expected_original_status
+    )
+    assert client.get("/projetos/url-adulterada").status_code == 404
+
+
+def test_project_slug_remains_unique_on_creation(client):
+    login(client)
+    create_project(client)
+    form_page = client.get("/admin/projetos/novo")
+
+    response = client.post(
+        "/admin/projetos/novo",
+        data=project_data(
+            csrf_from(form_page),
+            title="Outro projeto",
+            summary="Outro projeto tentando reutilizar uma URL já existente.",
+        ),
+        follow_redirects=False,
+    )
+    assert response.status_code == 422
+    assert "já está sendo usado por outro projeto" in response.text
+
+
+def test_project_edit_still_requires_csrf(client):
+    login(client)
+    project_id = create_project(client)
+    response = client.post(
+        f"/admin/projetos/{project_id}/editar",
+        data=project_data(""),
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
 
 
 def test_csrf_is_required(client):

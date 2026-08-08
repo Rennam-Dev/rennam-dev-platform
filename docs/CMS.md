@@ -33,5 +33,6 @@ Título, resumo, problema, objetivo, solução, arquitetura, fluxo de dados, tec
 
 - Preview privado antes da publicação.
 - Traduções podem ter estados diferentes.
-- Mudança de slug publicado gera redirect.
+- Na v0.2.1, o slug de todo projeto é imutável após a criação para preservar URLs.
+- Uma versão futura com histórico e redirects permitirá renomeação segura de slug.
 - Rascunhos e previews nunca aparecem publicamente ou no sitemap.

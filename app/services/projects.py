@@ -8,6 +8,10 @@ from app.models import Project, Technology
 from app.schemas.project import ProjectForm
 
 
+class ProjectSlugImmutableError(ValueError):
+    pass
+
+
 def slugify(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
@@ -49,7 +53,14 @@ def create_project(db: Session, form: ProjectForm) -> Project:
 
 
 def update_project(db: Session, project: Project, form: ProjectForm) -> Project:
-    for field, value in form.as_model_data().items():
+    if form.slug != project.slug:
+        raise ProjectSlugImmutableError(
+            "slug: não pode ser alterado após a criação."
+        )
+
+    model_data = form.as_model_data()
+    model_data.pop("slug")
+    for field, value in model_data.items():
         setattr(project, field, value)
     sync_technologies(db, project, form.technologies)
     db.commit()

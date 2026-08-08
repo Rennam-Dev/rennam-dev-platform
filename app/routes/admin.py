@@ -308,16 +308,15 @@ async def update_project(
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
     form, values, errors = await read_project_form(request)
-    slug_owner = project_repository.get_by_slug(db, form.slug) if form else None
-    if form and slug_owner and slug_owner.id != project.id:
-        errors.append("slug: já está sendo usado por outro projeto.")
-        form = None
     if form:
         try:
             project_service.update_project(db, project, form)
             return RedirectResponse(
                 f"/admin/projetos/{project.id}/editar?saved=1", status_code=303
             )
+        except project_service.ProjectSlugImmutableError as error:
+            errors.append(str(error))
+            values["slug"] = project.slug
         except IntegrityError:
             db.rollback()
             errors.append("Não foi possível salvar: valor único duplicado.")
