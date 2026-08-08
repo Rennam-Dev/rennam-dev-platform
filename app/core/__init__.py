@@ -1,0 +1,1 @@
+"""Configuração, banco e segurança."""

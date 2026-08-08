@@ -1,0 +1,14 @@
+{% extends "public/base.html" %}
+{% block title %}{{ article.title }} — rennam.dev{% endblock %}
+{% block description %}{{ article.summary }}{% endblock %}
+{% block content %}
+<article class="article">
+  <header class="page-header">
+    <a class="back-link" href="/blog">← blog</a>
+    <p class="eyebrow">{{ article.date }}</p>
+    <h1>{{ article.title }}</h1>
+    <p>{{ article.summary }}</p>
+  </header>
+  <div class="prose article__body">{{ article.body | markdown }}</div>
+</article>
+{% endblock %}

@@ -1,0 +1,14 @@
+<article class="project-card">
+  <div class="project-card__topline">
+    <span class="badge">{{ status_labels.get(project.status, project.status) }}</span>
+    {% if project.course %}<small>{{ project.course }}</small>{% endif %}
+  </div>
+  <h3><a href="/projetos/{{ project.slug }}">{{ project.title }}</a></h3>
+  <p>{{ project.summary }}</p>
+  <div class="chips">
+    {% for technology in project.technologies[:4] %}
+      <span>{{ technology.name }}</span>
+    {% endfor %}
+  </div>
+  <a class="card-link" href="/projetos/{{ project.slug }}">ver estudo de caso →</a>
+</article>

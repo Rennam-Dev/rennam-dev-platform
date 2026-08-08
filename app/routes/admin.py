@@ -1,0 +1,297 @@
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.core.security import (
+    ensure_csrf_token,
+    is_admin,
+    login_admin,
+    logout_admin,
+    validate_csrf,
+    verify_admin_credentials,
+)
+from app.repositories import projects as project_repository
+from app.schemas.project import ProjectForm
+from app.services import projects as project_service
+from app.web import templates
+
+router = APIRouter(prefix="/admin")
+DBSession = Annotated[Session, Depends(get_db)]
+
+
+def redirect_to_login() -> RedirectResponse:
+    return RedirectResponse("/admin/login", status_code=303)
+
+
+def admin_context(request: Request, **extra) -> dict:
+    return {
+        "request": request,
+        "settings": settings,
+        "csrf_token": ensure_csrf_token(request),
+        **extra,
+    }
+
+
+def form_values(project=None) -> dict[str, Any]:
+    if project is None:
+        return {
+            "title": "",
+            "slug": "",
+            "summary": "",
+            "problem": "",
+            "solution": "",
+            "architecture": "",
+            "decisions": "",
+            "results": "",
+            "learnings": "",
+            "course": "",
+            "status": "planned",
+            "visibility": "draft",
+            "featured": False,
+            "technologies": "",
+            "repo_url": "",
+            "demo_url": "",
+            "cover_image_url": "",
+            "seo_description": "",
+        }
+    values = {
+        column.name: getattr(project, column.name)
+        for column in project.__table__.columns
+        if column.name not in {"id", "created_at", "updated_at"}
+    }
+    values["technologies"] = ", ".join(
+        technology.name for technology in project.technologies
+    )
+    return values
+
+
+async def read_project_form(
+    request: Request,
+) -> tuple[ProjectForm | None, dict, list[str]]:
+    raw = await request.form()
+    values = {
+        "title": raw.get("title", ""),
+        "slug": raw.get("slug", ""),
+        "summary": raw.get("summary", ""),
+        "problem": raw.get("problem", ""),
+        "solution": raw.get("solution", ""),
+        "architecture": raw.get("architecture", ""),
+        "decisions": raw.get("decisions", ""),
+        "results": raw.get("results", ""),
+        "learnings": raw.get("learnings", ""),
+        "course": raw.get("course", ""),
+        "status": raw.get("status", "planned"),
+        "visibility": raw.get("visibility", "draft"),
+        "featured": raw.get("featured") == "on",
+        "technologies": raw.get("technologies", ""),
+        "repo_url": raw.get("repo_url") or None,
+        "demo_url": raw.get("demo_url") or None,
+        "cover_image_url": raw.get("cover_image_url") or None,
+        "seo_description": raw.get("seo_description", ""),
+    }
+    try:
+        return ProjectForm.model_validate(values), values, []
+    except ValidationError as error:
+        messages = [
+            f"{'.'.join(str(part) for part in item['loc'])}: {item['msg']}"
+            for item in error.errors()
+        ]
+        return None, values, messages
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    if is_admin(request):
+        return RedirectResponse("/admin", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/login.html",
+        context=admin_context(request, error=None),
+    )
+
+
+@router.post("/login", response_class=HTMLResponse)
+async def login(request: Request):
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    username = str(data.get("username", ""))
+    password = str(data.get("password", ""))
+    if verify_admin_credentials(username, password):
+        login_admin(request)
+        return RedirectResponse("/admin", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/login.html",
+        context=admin_context(
+            request,
+            error=(
+                "Configure ADMIN_PASSWORD_HASH no .env."
+                if not settings.admin_password_hash
+                else "Usuário ou senha inválidos."
+            ),
+        ),
+        status_code=401,
+    )
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    logout_admin(request)
+    return redirect_to_login()
+
+
+@router.get("", response_class=HTMLResponse)
+def dashboard(request: Request, db: DBSession):
+    if not is_admin(request):
+        return redirect_to_login()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/dashboard.html",
+        context=admin_context(
+            request,
+            projects=project_repository.list_all(db),
+        ),
+    )
+
+
+@router.get("/projetos/novo", response_class=HTMLResponse)
+def new_project_page(request: Request):
+    if not is_admin(request):
+        return redirect_to_login()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/project_form.html",
+        context=admin_context(
+            request,
+            page_title="Novo projeto",
+            action="/admin/projetos/novo",
+            values=form_values(),
+            errors=[],
+        ),
+    )
+
+
+@router.post("/projetos/novo", response_class=HTMLResponse)
+async def create_project(request: Request, db: DBSession):
+    if not is_admin(request):
+        return redirect_to_login()
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    form, values, errors = await read_project_form(request)
+    if form and project_repository.get_by_slug(db, form.slug):
+        errors.append("slug: já está sendo usado por outro projeto.")
+        form = None
+    if form:
+        try:
+            project = project_service.create_project(db, form)
+            return RedirectResponse(
+                f"/admin/projetos/{project.id}/editar?saved=1", status_code=303
+            )
+        except IntegrityError:
+            db.rollback()
+            errors.append("Não foi possível salvar: valor único duplicado.")
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/project_form.html",
+        context=admin_context(
+            request,
+            page_title="Novo projeto",
+            action="/admin/projetos/novo",
+            values=values,
+            errors=errors,
+        ),
+        status_code=422,
+    )
+
+
+@router.get("/projetos/{project_id}/editar", response_class=HTMLResponse)
+def edit_project_page(
+    request: Request,
+    project_id: int,
+    db: DBSession,
+    saved: int = 0,
+):
+    if not is_admin(request):
+        return redirect_to_login()
+    project = project_repository.get_by_id(db, project_id)
+    if project is None:
+        return RedirectResponse("/admin", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/project_form.html",
+        context=admin_context(
+            request,
+            page_title=f"Editar: {project.title}",
+            action=f"/admin/projetos/{project.id}/editar",
+            values=form_values(project),
+            errors=[],
+            saved=bool(saved),
+            project=project,
+        ),
+    )
+
+
+@router.post("/projetos/{project_id}/editar", response_class=HTMLResponse)
+async def update_project(
+    request: Request,
+    project_id: int,
+    db: DBSession,
+):
+    if not is_admin(request):
+        return redirect_to_login()
+    project = project_repository.get_by_id(db, project_id)
+    if project is None:
+        return RedirectResponse("/admin", status_code=303)
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    form, values, errors = await read_project_form(request)
+    slug_owner = project_repository.get_by_slug(db, form.slug) if form else None
+    if form and slug_owner and slug_owner.id != project.id:
+        errors.append("slug: já está sendo usado por outro projeto.")
+        form = None
+    if form:
+        try:
+            project_service.update_project(db, project, form)
+            return RedirectResponse(
+                f"/admin/projetos/{project.id}/editar?saved=1", status_code=303
+            )
+        except IntegrityError:
+            db.rollback()
+            errors.append("Não foi possível salvar: valor único duplicado.")
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/project_form.html",
+        context=admin_context(
+            request,
+            page_title=f"Editar: {project.title}",
+            action=f"/admin/projetos/{project.id}/editar",
+            values=values,
+            errors=errors,
+            project=project,
+        ),
+        status_code=422,
+    )
+
+
+@router.post("/projetos/{project_id}/excluir")
+async def remove_project(
+    request: Request,
+    project_id: int,
+    db: DBSession,
+):
+    if not is_admin(request):
+        return redirect_to_login()
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    project = project_repository.get_by_id(db, project_id)
+    if project:
+        project_service.delete_project(db, project)
+    return RedirectResponse("/admin", status_code=303)

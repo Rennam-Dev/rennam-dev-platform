@@ -1,0 +1,66 @@
+{% extends "public/base.html" %}
+{% block title %}rennam.dev — engenharia de IA e dados{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow"><span>rennam@dev</span>:<b>~</b>$ whoami</p>
+  <h1>Construo sistemas de IA e dados — <em>do experimento ao deploy</em>.<i>_</i></h1>
+  <p class="hero__lead">
+    Desenvolvedor e consultor construindo aplicações de IA, automação e dados
+    com foco em problemas reais, decisões explicáveis e produção.
+  </p>
+  <div class="actions">
+    <a class="button button--primary" href="/projetos">Ver projetos →</a>
+    <a class="button" href="/sobre">Conhecer minha trajetória</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-heading">
+    <h2>// projetos em destaque</h2>
+    <a href="/projetos">todos →</a>
+  </div>
+  {% if featured_projects %}
+    <div class="project-grid">
+      {% for project in featured_projects %}
+        {% include "public/partials/project_card.html" %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <span>primeiro projeto em preparação</span>
+      <h3>Rennam Semantic Docs</h3>
+      <p>Busca semântica em documentos com embeddings e banco vetorial. O estudo de caso será publicado aqui.</p>
+    </div>
+  {% endif %}
+</section>
+
+<section class="section split-section">
+  <div>
+    <p class="eyebrow">// agora</p>
+    <h2>Aprendizado que vira evidência.</h2>
+  </div>
+  <p>
+    Estou avançando na Formação AI Data Engineer e transformando cada etapa em
+    um projeto autoral. O primeiro foco é embeddings, bancos vetoriais e busca
+    semântica — antes de chamar qualquer coisa de RAG e torcer para ninguém perguntar.
+  </p>
+</section>
+
+{% if posts %}
+<section class="section">
+  <div class="section-heading">
+    <h2>// notas recentes</h2>
+    <a href="/blog">arquivo →</a>
+  </div>
+  <div class="post-list">
+    {% for post in posts %}
+      <a class="post-row" href="/blog/{{ post.slug }}">
+        <span>{{ post.date }}</span>
+        <strong>{{ post.title }}</strong>
+        <i>→</i>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

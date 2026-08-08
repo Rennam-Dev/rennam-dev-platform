@@ -1,0 +1,70 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ page_title }} — rennam.admin{% endblock %}
+{% block content %}
+<div class="admin-title">
+  <div><a class="back-link" href="/admin">← projetos</a><h1>{{ page_title }}</h1></div>
+  {% if project and project.visibility == "published" %}<a href="/projetos/{{ project.slug }}" target="_blank">ver página ↗</a>{% endif %}
+</div>
+
+{% if saved %}<div class="alert alert--success">Projeto salvo.</div>{% endif %}
+{% if errors %}
+<div class="alert alert--error"><strong>Revise os campos:</strong><ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<form class="project-form" action="{{ action }}" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <section class="form-section">
+    <div><span>01</span><h2>Identidade</h2><p>O que aparece nos cards e na URL.</p></div>
+    <div class="form-grid">
+      <label class="span-2">Título<input name="title" value="{{ values.title }}" minlength="3" maxlength="160" required></label>
+      <label>Slug<input name="slug" value="{{ values.slug }}" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="busca-semantica" required></label>
+      <label>Status<select name="status">
+        {% for value, label in [("planned","Planejado"),("building","Em desenvolvimento"),("complete","Concluído")] %}
+        <option value="{{ value }}" {% if values.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select></label>
+      <label class="span-2">Resumo<textarea name="summary" rows="3" minlength="10" maxlength="320" required>{{ values.summary }}</textarea></label>
+      <label class="span-2">Tecnologias <small>separadas por vírgula</small><input name="technologies" value="{{ values.technologies }}" placeholder="Python, FastAPI, PostgreSQL, pgvector"></label>
+      <label class="span-2">Disciplina ou origem<input name="course" value="{{ values.course }}" placeholder="DSA — Modelos de Embeddings e Bancos Vetoriais"></label>
+    </div>
+  </section>
+
+  <section class="form-section">
+    <div><span>02</span><h2>Estudo de caso</h2><p>Markdown permitido. Conteúdo sanitizado na renderização.</p></div>
+    <div class="form-grid">
+      {% for name, label in [("problem","Problema"),("solution","Solução"),("architecture","Arquitetura"),("decisions","Decisões técnicas"),("results","Resultados"),("learnings","Aprendizados")] %}
+      <label class="span-2">{{ label }}<textarea name="{{ name }}" rows="7">{{ values[name] }}</textarea></label>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="form-section">
+    <div><span>03</span><h2>Links e publicação</h2><p>Rascunhos nunca aparecem no site público.</p></div>
+    <div class="form-grid">
+      <label>GitHub<input name="repo_url" type="url" value="{{ values.repo_url }}" placeholder="https://github.com/..."></label>
+      <label>Demonstração<input name="demo_url" type="url" value="{{ values.demo_url }}" placeholder="https://..."></label>
+      <label class="span-2">Imagem de capa (URL)<input name="cover_image_url" type="url" value="{{ values.cover_image_url }}"></label>
+      <label class="span-2">Descrição SEO<textarea name="seo_description" rows="2" maxlength="320">{{ values.seo_description }}</textarea></label>
+      <label>Visibilidade<select name="visibility">
+        <option value="draft" {% if values.visibility == "draft" %}selected{% endif %}>Rascunho</option>
+        <option value="published" {% if values.visibility == "published" %}selected{% endif %}>Publicado</option>
+      </select></label>
+      <label class="checkbox"><input name="featured" type="checkbox" {% if values.featured %}checked{% endif %}> Destacar na Home</label>
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <button class="button button--primary" type="submit">Salvar projeto</button>
+    <a class="button" href="/admin">Cancelar</a>
+  </div>
+</form>
+
+{% if project %}
+<form class="danger-zone" action="/admin/projetos/{{ project.id }}/excluir" method="post" onsubmit="return confirm('Excluir este projeto permanentemente?')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div><strong>Zona de risco</strong><p>A exclusão é permanente.</p></div>
+  <button type="submit">Excluir projeto</button>
+</form>
+{% endif %}
+{% endblock %}

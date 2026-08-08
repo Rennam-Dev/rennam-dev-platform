@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Painel — rennam.dev{% endblock %}</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+</head>
+<body class="admin-body">
+  <header class="admin-header">
+    <div class="container admin-header__inner">
+      <a class="brand" href="/admin">rennam<span>.admin</span></a>
+      <div class="admin-header__actions">
+        <a href="/" target="_blank">ver site ↗</a>
+        {% if request.session.get("admin") %}
+        <form action="/admin/logout" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="link-button" type="submit">sair</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+  <main class="container admin-main">{% block content %}{% endblock %}</main>
+</body>
+</html>

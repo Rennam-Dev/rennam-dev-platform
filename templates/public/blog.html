@@ -1,0 +1,20 @@
+{% extends "public/base.html" %}
+{% block title %}Blog — rennam.dev{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="eyebrow">// build log</p>
+  <h1>Aprendizados, decisões e bugs honestos.</h1>
+  <p>Notas sobre o que estou construindo — incluindo a parte em que a documentação parece simples até o primeiro erro às 2h da manhã.</p>
+</header>
+<div class="post-list">
+  {% for post in posts %}
+    <a class="post-row" href="/blog/{{ post.slug }}">
+      <span>{{ post.date }}</span>
+      <div><strong>{{ post.title }}</strong><p>{{ post.summary }}</p></div>
+      <i>→</i>
+    </a>
+  {% else %}
+    <div class="empty-state"><p>Nenhuma nota publicada ainda.</p></div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="admin-title">
+  <div><p class="eyebrow">// conteúdo</p><h1>Projetos</h1></div>
+  <a class="button button--primary" href="/admin/projetos/novo">Novo projeto +</a>
+</div>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Projeto</th><th>Status</th><th>Visibilidade</th><th>Atualizado</th><th></th></tr></thead>
+    <tbody>
+    {% for project in projects %}
+      <tr>
+        <td><strong>{{ project.title }}</strong><small>/projetos/{{ project.slug }}</small></td>
+        <td>{{ project.status }}</td>
+        <td><span class="badge">{{ project.visibility }}</span>{% if project.featured %} <span class="badge badge--accent">destaque</span>{% endif %}</td>
+        <td>{{ project.updated_at.strftime("%d/%m/%Y") }}</td>
+        <td><a href="/admin/projetos/{{ project.id }}/editar">editar →</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5">Nenhum projeto cadastrado.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

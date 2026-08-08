@@ -1,0 +1,14 @@
+{% extends "public/base.html" %}
+{% block title %}Contato — rennam.dev{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="eyebrow">// contato</p>
+  <h1>Vamos conversar.</h1>
+  <p>Para oportunidades, projetos ou uma boa conversa técnica, use um dos canais abaixo.</p>
+</header>
+<div class="contact-grid">
+  <a href="mailto:{{ settings.contact_email }}"><span>e-mail</span><strong>{{ settings.contact_email }}</strong><i>→</i></a>
+  <a href="{{ settings.linkedin_url }}" target="_blank" rel="noopener"><span>rede profissional</span><strong>LinkedIn</strong><i>↗</i></a>
+  <a href="{{ settings.github_url }}" target="_blank" rel="noopener"><span>código</span><strong>GitHub</strong><i>↗</i></a>
+</div>
+{% endblock %}

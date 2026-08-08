@@ -1,0 +1,32 @@
+{% extends "public/base.html" %}
+{% block title %}Projetos — rennam.dev{% endblock %}
+{% block description %}Projetos autorais de engenharia de dados, inteligência artificial, APIs e automação.{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="eyebrow">// trabalho verificável</p>
+  <h1>Projetos</h1>
+  <p>Cada projeto registra o problema, a arquitetura, as decisões técnicas e o que aprendi construindo.</p>
+</header>
+
+{% if technologies %}
+<nav class="filters" aria-label="Filtrar projetos por tecnologia">
+  <a class="{% if not selected_technology %}is-active{% endif %}" href="/projetos">todos</a>
+  {% for technology in technologies %}
+    <a class="{% if selected_technology == technology.slug %}is-active{% endif %}" href="/projetos?tecnologia={{ technology.slug }}">{{ technology.name }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{% if projects %}
+  <div class="project-grid">
+    {% for project in projects %}
+      {% include "public/partials/project_card.html" %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <h2>Nenhum projeto publicado neste filtro.</h2>
+    <p>Os rascunhos ficam invisíveis até estarem prontos para serem defendidos tecnicamente.</p>
+  </div>
+{% endif %}
+{% endblock %}

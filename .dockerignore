@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.venv
+__pycache__
+*.pyc
+*.db
+.pytest_cache
+tests
+rennam-dev.zip

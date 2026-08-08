@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}rennam.dev{% endblock %}</title>
+  <meta name="description" content="{% block description %}Portfólio de Rennam: sistemas de IA, dados e automação que chegam à produção.{% endblock %}">
+  <meta property="og:title" content="{% block og_title %}rennam.dev{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Engenharia de IA e dados, do experimento ao deploy.{% endblock %}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ settings.site_url }}{{ request.url.path }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+  <div class="status-bar">
+    <div class="container status-bar__inner">
+      <span><i class="status-dot"></i> rennam@dev</span>
+      <span class="status-bar__message">construindo em público · projeto 0</span>
+    </div>
+  </div>
+
+  <header class="site-header">
+    <nav class="container nav" aria-label="Navegação principal">
+      <a class="brand" href="/">rennam<span>.dev</span></a>
+      <div class="nav__desktop">
+        {% set nav_items = [
+          ("projects", "/projetos", "projetos"),
+          ("about", "/sobre", "sobre"),
+          ("blog", "/blog", "blog"),
+          ("contact", "/contato", "contato")
+        ] %}
+        {% for key, href, label in nav_items %}
+          <a class="{% if active == key %}is-active{% endif %}" href="{{ href }}">{{ label }}</a>
+        {% endfor %}
+      </div>
+      <details class="nav__mobile">
+        <summary aria-label="Abrir menu">menu</summary>
+        <div class="nav__mobile-panel">
+          {% for key, href, label in nav_items %}
+            <a class="{% if active == key %}is-active{% endif %}" href="{{ href }}">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </details>
+    </nav>
+  </header>
+
+  <main id="conteudo" class="container main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <span>© 2026 Rennam · FastAPI, PostgreSQL e curiosidade aplicada.</span>
+      <span class="footer-links">
+        <a href="mailto:{{ settings.contact_email }}">e-mail</a>
+        <a href="{{ settings.github_url }}" rel="me noopener" target="_blank">GitHub</a>
+        <a href="{{ settings.linkedin_url }}" rel="me noopener" target="_blank">LinkedIn</a>
+      </span>
+    </div>
+  </footer>
+</body>
+</html>

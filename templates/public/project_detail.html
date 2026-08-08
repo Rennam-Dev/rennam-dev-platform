@@ -1,0 +1,42 @@
+{% extends "public/base.html" %}
+{% block title %}{{ project.title }} — rennam.dev{% endblock %}
+{% block description %}{{ project.seo_description or project.summary }}{% endblock %}
+{% block content %}
+<article class="case-study">
+  <header class="page-header case-study__header">
+    <a class="back-link" href="/projetos">← projetos</a>
+    <p class="eyebrow">{{ status_labels.get(project.status, project.status) }}{% if project.course %} · {{ project.course }}{% endif %}</p>
+    <h1>{{ project.title }}</h1>
+    <p>{{ project.summary }}</p>
+    <div class="chips">
+      {% for technology in project.technologies %}<span>{{ technology.name }}</span>{% endfor %}
+    </div>
+    <div class="actions">
+      {% if project.repo_url %}<a class="button button--primary" href="{{ project.repo_url }}" target="_blank" rel="noopener">Ver código ↗</a>{% endif %}
+      {% if project.demo_url %}<a class="button" href="{{ project.demo_url }}" target="_blank" rel="noopener">Abrir demonstração ↗</a>{% endif %}
+    </div>
+  </header>
+
+  {% set sections = [
+    ("01", "Problema", project.problem),
+    ("02", "Solução", project.solution),
+    ("03", "Arquitetura", project.architecture),
+    ("04", "Decisões técnicas", project.decisions),
+    ("05", "Resultados", project.results),
+    ("06", "Aprendizados", project.learnings)
+  ] %}
+  <div class="case-study__body">
+    {% for number, title, body in sections %}
+      {% if body %}
+      <section class="case-section">
+        <div class="case-section__label">{{ number }}</div>
+        <div>
+          <h2>{{ title }}</h2>
+          <div class="prose">{{ body | markdown }}</div>
+        </div>
+      </section>
+      {% endif %}
+    {% endfor %}
+  </div>
+</article>
+{% endblock %}

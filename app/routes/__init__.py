@@ -1,0 +1,1 @@
+"""Rotas públicas e administrativas."""

@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% block title %}Login — rennam.admin{% endblock %}
+{% block content %}
+<div class="login-card">
+  <p class="eyebrow">// acesso privado</p>
+  <h1>Painel do portfólio</h1>
+  <p>Um administrador. Sem cadastro público, sem teatro corporativo.</p>
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+  <form class="form" action="/admin/login" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Usuário<input name="username" autocomplete="username" required></label>
+    <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="button button--primary" type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}
