@@ -15,6 +15,7 @@ from app.core.security import (
     is_admin,
     login_admin,
     logout_admin,
+    require_admin,
     validate_csrf,
     verify_admin_credentials,
 )
@@ -26,6 +27,7 @@ from app.web import templates
 
 router = APIRouter(prefix="/admin")
 DBSession = Annotated[Session, Depends(get_db)]
+AdminAccess = Annotated[None, Depends(require_admin)]
 logger = logging.getLogger("rennam.admin_auth")
 login_rate_limiter = LoginRateLimiter(
     max_failures=settings.admin_login_max_failures,
@@ -202,7 +204,7 @@ async def login(request: Request):
 
 
 @router.post("/logout")
-async def logout(request: Request):
+async def logout(request: Request, _admin: AdminAccess):
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
     logout_admin(request)
@@ -210,9 +212,7 @@ async def logout(request: Request):
 
 
 @router.get("", response_class=HTMLResponse)
-def dashboard(request: Request, db: DBSession):
-    if not is_admin(request):
-        return redirect_to_login()
+def dashboard(request: Request, _admin: AdminAccess, db: DBSession):
     return templates.TemplateResponse(
         request=request,
         name="admin/dashboard.html",
@@ -224,9 +224,7 @@ def dashboard(request: Request, db: DBSession):
 
 
 @router.get("/projetos/novo", response_class=HTMLResponse)
-def new_project_page(request: Request):
-    if not is_admin(request):
-        return redirect_to_login()
+def new_project_page(request: Request, _admin: AdminAccess):
     return templates.TemplateResponse(
         request=request,
         name="admin/project_form.html",
@@ -241,9 +239,7 @@ def new_project_page(request: Request):
 
 
 @router.post("/projetos/novo", response_class=HTMLResponse)
-async def create_project(request: Request, db: DBSession):
-    if not is_admin(request):
-        return redirect_to_login()
+async def create_project(request: Request, _admin: AdminAccess, db: DBSession):
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
     form, values, errors = await read_project_form(request)
@@ -276,12 +272,11 @@ async def create_project(request: Request, db: DBSession):
 @router.get("/projetos/{project_id}/editar", response_class=HTMLResponse)
 def edit_project_page(
     request: Request,
+    _admin: AdminAccess,
     project_id: int,
     db: DBSession,
     saved: int = 0,
 ):
-    if not is_admin(request):
-        return redirect_to_login()
     project = project_repository.get_by_id(db, project_id)
     if project is None:
         return RedirectResponse("/admin", status_code=303)
@@ -303,11 +298,10 @@ def edit_project_page(
 @router.post("/projetos/{project_id}/editar", response_class=HTMLResponse)
 async def update_project(
     request: Request,
+    _admin: AdminAccess,
     project_id: int,
     db: DBSession,
 ):
-    if not is_admin(request):
-        return redirect_to_login()
     project = project_repository.get_by_id(db, project_id)
     if project is None:
         return RedirectResponse("/admin", status_code=303)
@@ -345,11 +339,10 @@ async def update_project(
 @router.post("/projetos/{project_id}/excluir")
 async def remove_project(
     request: Request,
+    _admin: AdminAccess,
     project_id: int,
     db: DBSession,
 ):
-    if not is_admin(request):
-        return redirect_to_login()
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
     project = project_repository.get_by_id(db, project_id)

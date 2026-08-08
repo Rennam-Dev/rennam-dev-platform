@@ -24,6 +24,14 @@ def is_admin(request: Request) -> bool:
     return request.session.get("admin") == settings.admin_username
 
 
+def require_admin(request: Request) -> None:
+    if not is_admin(request):
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            headers={"Location": "/admin/login"},
+        )
+
+
 def login_admin(request: Request) -> None:
     request.session.clear()
     request.session["admin"] = settings.admin_username

@@ -1,9 +1,11 @@
 import logging
 import re
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
+from app.core.security import require_admin
 from app.main import app
 from app.routes import admin as admin_routes
 
@@ -41,10 +43,88 @@ def login_attempt(client, *, password: str, username: str = "rennam"):
     )
 
 
-def test_admin_requires_login(client):
+PROTECTED_ADMIN_ROUTES = {
+    ("GET", "/admin"),
+    ("POST", "/admin/logout"),
+    ("GET", "/admin/projetos/novo"),
+    ("POST", "/admin/projetos/novo"),
+    ("GET", "/admin/projetos/{project_id}/editar"),
+    ("POST", "/admin/projetos/{project_id}/editar"),
+    ("POST", "/admin/projetos/{project_id}/excluir"),
+}
+
+
+def test_all_protected_admin_routes_use_require_admin() -> None:
+    routes_with_dependency = {
+        (method, route.path)
+        for route in admin_routes.router.routes
+        if isinstance(route, APIRoute)
+        and any(
+            dependency.call is require_admin
+            for dependency in route.dependant.dependencies
+        )
+        for method in route.methods
+    }
+    assert routes_with_dependency == PROTECTED_ADMIN_ROUTES
+
+
+def test_protected_admin_routes_redirect_without_session(client):
+    requests = [
+        ("GET", "/admin"),
+        ("POST", "/admin/logout"),
+        ("GET", "/admin/projetos/novo"),
+        ("POST", "/admin/projetos/novo"),
+        ("GET", "/admin/projetos/999/editar"),
+        ("POST", "/admin/projetos/999/editar"),
+        ("POST", "/admin/projetos/999/excluir"),
+    ]
+
+    for method, path in requests:
+        response = client.request(method, path, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/admin/login"
+
+
+def test_invalid_admin_session_does_not_authorize(client):
+    client.cookies.set("rennam_session", "invalid-signed-session")
     response = client.get("/admin", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/admin/login"
+
+
+def test_unauthenticated_request_does_not_reach_repository(client, monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("repository should not be called")
+
+    monkeypatch.setattr(admin_routes.project_repository, "list_all", fail_if_called)
+    response = client.get("/admin", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_login_is_public_without_redirect_loop_and_public_site_stays_public(client):
+    login_page = client.get("/admin/login", follow_redirects=False)
+    assert login_page.status_code == 200
+    assert client.get("/", follow_redirects=False).status_code == 200
+
+
+def test_authenticated_admin_routes_and_logout(client):
+    login(client)
+
+    assert client.get("/admin").status_code == 200
+    assert client.get("/admin/projetos/novo").status_code == 200
+
+    dashboard = client.get("/admin")
+    logout_response = client.post(
+        "/admin/logout",
+        data={"csrf_token": csrf_from(dashboard)},
+        follow_redirects=False,
+    )
+    assert logout_response.status_code == 303
+    assert logout_response.headers["location"] == "/admin/login"
+
+    after_logout = client.get("/admin", follow_redirects=False)
+    assert after_logout.status_code == 303
+    assert after_logout.headers["location"] == "/admin/login"
 
 
 def test_admin_can_create_project(client):
