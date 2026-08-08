@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     github_url: str = "https://github.com/"
     linkedin_url: str = "https://www.linkedin.com/"
     contact_email: str = "eu@rennam.dev"
+    admin_login_max_failures: int = 5
+    admin_login_window_seconds: int = 10 * 60
+    admin_login_max_clients: int = 10_000
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
@@ -38,6 +41,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_configuration(self) -> Self:
+        if self.admin_login_max_failures < 1:
+            raise ValueError("ADMIN_LOGIN_MAX_FAILURES deve ser maior que zero")
+        if self.admin_login_window_seconds < 1:
+            raise ValueError("ADMIN_LOGIN_WINDOW_SECONDS deve ser maior que zero")
+        if self.admin_login_max_clients < 1:
+            raise ValueError("ADMIN_LOGIN_MAX_CLIENTS deve ser maior que zero")
+
         if self.app_env != "production":
             return self
 

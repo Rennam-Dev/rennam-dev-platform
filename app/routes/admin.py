@@ -1,3 +1,5 @@
+import ipaddress
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
@@ -19,10 +21,17 @@ from app.core.security import (
 from app.repositories import projects as project_repository
 from app.schemas.project import ProjectForm
 from app.services import projects as project_service
+from app.services.login_protection import LoginRateLimiter, RateLimitDecision
 from app.web import templates
 
 router = APIRouter(prefix="/admin")
 DBSession = Annotated[Session, Depends(get_db)]
+logger = logging.getLogger("rennam.admin_auth")
+login_rate_limiter = LoginRateLimiter(
+    max_failures=settings.admin_login_max_failures,
+    window_seconds=settings.admin_login_window_seconds,
+    max_clients=settings.admin_login_max_clients,
+)
 
 
 def redirect_to_login() -> RedirectResponse:
@@ -36,6 +45,43 @@ def admin_context(request: Request, **extra) -> dict:
         "csrf_token": ensure_csrf_token(request),
         **extra,
     }
+
+
+def observed_client_ip(request: Request) -> str:
+    if request.client is None:
+        return "unknown"
+    try:
+        return ipaddress.ip_address(request.client.host).compressed
+    except ValueError:
+        return "unknown"
+
+
+def audit_login(event: str, request: Request, client_ip: str, result: str) -> None:
+    logger.info(
+        event,
+        extra={
+            "event": event,
+            "client_ip": client_ip,
+            "path": request.url.path,
+            "result": result,
+        },
+    )
+
+
+def rate_limited_response(
+    request: Request, client_ip: str, decision: RateLimitDecision
+) -> HTMLResponse:
+    audit_login("admin_login_rate_limited", request, client_ip, "rate_limited")
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/login.html",
+        context=admin_context(
+            request,
+            error="Muitas tentativas. Aguarde antes de tentar novamente.",
+        ),
+        status_code=429,
+        headers={"Retry-After": str(decision.retry_after)},
+    )
 
 
 def form_values(project=None) -> dict[str, Any]:
@@ -120,11 +166,26 @@ def login_page(request: Request):
 async def login(request: Request):
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
+    client_ip = observed_client_ip(request)
+    try:
+        decision = login_rate_limiter.check(client_ip)
+    except Exception:
+        decision = RateLimitDecision(
+            limited=True,
+            retry_after=settings.admin_login_window_seconds,
+        )
+    if decision.limited:
+        return rate_limited_response(request, client_ip, decision)
+
     username = str(data.get("username", ""))
     password = str(data.get("password", ""))
     if verify_admin_credentials(username, password):
+        login_rate_limiter.record_success(client_ip)
         login_admin(request)
+        audit_login("admin_login_success", request, client_ip, "success")
         return RedirectResponse("/admin", status_code=303)
+    login_rate_limiter.record_failure(client_ip)
+    audit_login("admin_login_failure", request, client_ip, "failure")
     return templates.TemplateResponse(
         request=request,
         name="admin/login.html",

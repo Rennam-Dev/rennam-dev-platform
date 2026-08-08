@@ -22,12 +22,15 @@ from app.core.config import settings  # noqa: E402
 from app.core.database import Base, engine  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.main import app  # noqa: E402
+from app.routes.admin import login_rate_limiter  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def reset_database(request: pytest.FixtureRequest):
+    login_rate_limiter.reset()
     if request.node.get_closest_marker("no_database"):
         yield
+        login_rate_limiter.reset()
         return
 
     assert_safe_test_database(
@@ -44,6 +47,7 @@ def reset_database(request: pytest.FixtureRequest):
     Base.metadata.create_all(bind=engine)
     settings.admin_password_hash = hash_password("test-password")
     yield
+    login_rate_limiter.reset()
     assert_safe_test_database(
         TEST_DATABASE_URL,
         settings.app_env,
