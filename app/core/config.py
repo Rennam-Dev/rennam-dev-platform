@@ -21,6 +21,9 @@ HOSTNAME_PATTERN = re.compile(
     r"(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
 )
 AppEnvironment = Literal["development", "test", "staging", "production"]
+DEPLOYED_ENVIRONMENTS: frozenset[AppEnvironment] = frozenset(
+    {"staging", "production"}
+)
 
 
 class Settings(BaseSettings):
@@ -101,7 +104,7 @@ class Settings(BaseSettings):
         return ",".join(dict.fromkeys(networks))
 
     @model_validator(mode="after")
-    def validate_production_configuration(self) -> Self:
+    def validate_deployed_configuration(self) -> Self:
         if self.admin_login_max_failures < 1:
             raise ValueError("ADMIN_LOGIN_MAX_FAILURES deve ser maior que zero")
         if self.admin_login_window_seconds < 1:
@@ -109,14 +112,20 @@ class Settings(BaseSettings):
         if self.admin_login_max_clients < 1:
             raise ValueError("ADMIN_LOGIN_MAX_CLIENTS deve ser maior que zero")
 
-        if self.app_env != "production":
+        if not self.requires_secure_configuration:
             return self
 
-        if self.session_secret == DEFAULT_SESSION_SECRET:
+        normalized_session_secret = self.session_secret.strip()
+        if normalized_session_secret != self.session_secret:
+            raise ValueError(
+                "SESSION_SECRET não pode conter caracteres em branco nas "
+                "bordas em staging/production"
+            )
+        if normalized_session_secret == DEFAULT_SESSION_SECRET:
             raise ValueError("SESSION_SECRET não pode usar o valor de desenvolvimento")
         if (
-            not self.session_secret.strip()
-            or len(self.session_secret) < MIN_SESSION_SECRET_LENGTH
+            not normalized_session_secret
+            or len(normalized_session_secret) < MIN_SESSION_SECRET_LENGTH
         ):
             message = (
                 "SESSION_SECRET deve ter ao menos "
@@ -132,10 +141,12 @@ class Settings(BaseSettings):
             database_url = urlsplit(self.database_url)
         except ValueError as error:
             raise ValueError(
-                "DATABASE_URL deve usar PostgreSQL em production"
+                "DATABASE_URL deve usar PostgreSQL em staging/production"
             ) from error
         if database_url.scheme.lower() not in POSTGRESQL_SCHEMES:
-            raise ValueError("DATABASE_URL deve usar PostgreSQL em production")
+            raise ValueError(
+                "DATABASE_URL deve usar PostgreSQL em staging/production"
+            )
 
         try:
             site_url = urlsplit(self.site_url)
@@ -157,11 +168,14 @@ class Settings(BaseSettings):
             )
 
         if not self.admin_username.strip():
-            raise ValueError("ADMIN_USERNAME não pode ser vazio em production")
+            raise ValueError(
+                "ADMIN_USERNAME não pode ser vazio em staging/production"
+            )
 
         if site_url.hostname not in self.allowed_host_list:
             raise ValueError(
-                "ALLOWED_HOSTS deve incluir o host de SITE_URL em production"
+                "ALLOWED_HOSTS deve incluir o host de SITE_URL em "
+                "staging/production"
             )
 
         self.admin_username = self.admin_username.strip()
@@ -173,8 +187,12 @@ class Settings(BaseSettings):
         return self.app_env == "production"
 
     @property
+    def requires_secure_configuration(self) -> bool:
+        return self.app_env in DEPLOYED_ENVIRONMENTS
+
+    @property
     def session_cookie_secure(self) -> bool:
-        return self.app_env == "production"
+        return self.requires_secure_configuration
 
     @property
     def allowed_host_list(self) -> list[str]:

@@ -5,7 +5,7 @@ from httpx import Response
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app import main as main_module
-from app.core.config import MIN_SESSION_SECRET_LENGTH, AppEnvironment, Settings
+from app.core.config import AppEnvironment, Settings
 
 pytestmark = pytest.mark.no_database
 
@@ -31,17 +31,24 @@ def make_app(
     return main_module.create_app()
 
 
-def production_settings() -> Settings:
+def deployed_settings(
+    app_env: AppEnvironment,
+    hostname: str = "rennam.example",
+) -> Settings:
     return Settings(
-        app_env="production",
+        app_env=app_env,
         database_url="postgresql+psycopg://app:discardable@db/rennam_dev",
-        session_secret="s" * MIN_SESSION_SECRET_LENGTH,
+        session_secret="0123456789abcdef" * 2,
         admin_username="admin",
         admin_password_hash=VALID_ARGON2_HASH,
-        site_url="https://rennam.example",
-        allowed_hosts="rennam.example",
+        site_url=f"https://{hostname}",
+        allowed_hosts=hostname,
         _env_file=None,
     )
+
+
+def production_settings() -> Settings:
+    return deployed_settings("production")
 
 
 def assert_security_headers(response: Response) -> None:
@@ -63,13 +70,18 @@ def test_non_production_exposes_docs_and_openapi_without_hsts(
     monkeypatch: pytest.MonkeyPatch,
     app_env: AppEnvironment,
 ) -> None:
-    application = make_app(
-        monkeypatch,
-        Settings(
+    configured_settings = (
+        deployed_settings("staging", hostname="testserver")
+        if app_env == "staging"
+        else Settings(
             app_env=app_env,
             allowed_hosts="testserver",
             _env_file=None,
-        ),
+        )
+    )
+    application = make_app(
+        monkeypatch,
+        configured_settings,
     )
     with TestClient(application) as client:
         docs = client.get("/docs")

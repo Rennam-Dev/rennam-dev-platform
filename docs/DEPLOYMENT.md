@@ -4,6 +4,12 @@
 
 Local, test, staging e production.
 
+Staging e production são ambientes implantáveis e falham na inicialização sem
+segredo de sessão não default e com ao menos 32 caracteres, hash administrativo
+Argon2, username não vazio, PostgreSQL, `SITE_URL` HTTPS e host permitido. Os
+placeholders de `.env.example` são exclusivos de development. O cookie de sessão
+é `Secure` nos dois ambientes.
+
 ## Produção
 
 - Docker.
@@ -30,7 +36,7 @@ local e publica a porta 8000 no host. Ele não representa a topologia de
 production. No deploy real, a porta do Uvicorn deve ficar em rede privada ou
 restrita ao endereço pelo qual o proxy controlado se conecta.
 
-Configure `ALLOWED_HOSTS` com hosts exatos. Em production, o hostname de
+Configure `ALLOWED_HOSTS` com hosts exatos. Em staging/production, o hostname de
 `SITE_URL` é obrigatório. Configure `FORWARDED_ALLOW_IPS` somente com os IPs ou
 CIDRs de origem do proxy controlado. `*` e redes `/0` são rejeitados; o default
 `127.0.0.1` não confia automaticamente em redes Docker.
@@ -54,7 +60,8 @@ ou `includeSubDomains` sem inventário e decisão operacional próprios.
 - `development`, `test` e `staging`: `/docs` e `/openapi.json` disponíveis;
 - `production`: `/docs`, `/redoc` e `/openapi.json` ausentes;
 - todos os ambientes: hosts validados e headers HTTP básicos;
-- somente `production`: cookie de sessão `Secure` e HSTS.
+- `staging` e `production`: cookie de sessão `Secure`;
+- somente `production`: HSTS.
 
 ## Regra
 

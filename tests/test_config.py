@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from app.core.config import (
     DEFAULT_SESSION_SECRET,
     MIN_SESSION_SECRET_LENGTH,
+    AppEnvironment,
     Settings,
 )
 
@@ -12,13 +13,16 @@ pytestmark = pytest.mark.no_database
 VALID_ARGON2_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$ZGlnZXN0"
 
 
-def production_settings(**overrides: str) -> Settings:
+def deployed_settings(
+    app_env: AppEnvironment = "production",
+    **overrides: str,
+) -> Settings:
     values = {
-        "app_env": "production",
+        "app_env": app_env,
         "database_url": (
             "postgresql+psycopg://app:discardable-password@db/rennam_dev"
         ),
-        "session_secret": "s" * MIN_SESSION_SECRET_LENGTH,
+        "session_secret": "0123456789abcdef" * 2,
         "admin_username": "admin",
         "admin_password_hash": VALID_ARGON2_HASH,
         "site_url": "https://rennam.example/",
@@ -28,11 +32,12 @@ def production_settings(**overrides: str) -> Settings:
     return Settings(_env_file=None, **values)
 
 
-@pytest.mark.parametrize("app_env", ["development", "test", "staging"])
-def test_non_production_environments_are_valid(app_env: str) -> None:
+@pytest.mark.parametrize("app_env", ["development", "test"])
+def test_local_environments_keep_convenient_defaults(app_env: str) -> None:
     configured = Settings(app_env=app_env, _env_file=None)
 
     assert configured.app_env == app_env
+    assert configured.requires_secure_configuration is False
     assert configured.session_cookie_secure is False
 
 
@@ -80,6 +85,14 @@ def test_development_defaults_remain_available(monkeypatch: pytest.MonkeyPatch) 
             f"SESSION_SECRET deve ter ao menos {MIN_SESSION_SECRET_LENGTH} caracteres",
         ),
         (
+            {"session_secret": f"{DEFAULT_SESSION_SECRET}      "},
+            "SESSION_SECRET não pode conter caracteres em branco nas bordas",
+        ),
+        (
+            {"session_secret": "short".ljust(MIN_SESSION_SECRET_LENGTH)},
+            "SESSION_SECRET não pode conter caracteres em branco nas bordas",
+        ),
+        (
             {"admin_password_hash": ""},
             "ADMIN_PASSWORD_HASH deve conter um hash Argon2 válido",
         ),
@@ -89,7 +102,7 @@ def test_development_defaults_remain_available(monkeypatch: pytest.MonkeyPatch) 
         ),
         (
             {"database_url": "sqlite+pysqlite:///:memory:"},
-            "DATABASE_URL deve usar PostgreSQL em production",
+            "DATABASE_URL deve usar PostgreSQL em staging/production",
         ),
         (
             {"site_url": "http://rennam.example"},
@@ -105,27 +118,33 @@ def test_development_defaults_remain_available(monkeypatch: pytest.MonkeyPatch) 
         ),
         (
             {"admin_username": ""},
-            "ADMIN_USERNAME não pode ser vazio em production",
+            "ADMIN_USERNAME não pode ser vazio em staging/production",
         ),
         (
             {"admin_username": "   "},
-            "ADMIN_USERNAME não pode ser vazio em production",
+            "ADMIN_USERNAME não pode ser vazio em staging/production",
         ),
     ],
 )
-def test_unsafe_production_configuration_is_rejected(
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_unsafe_deployed_configuration_is_rejected(
     overrides: dict[str, str],
     expected_message: str,
+    app_env: AppEnvironment,
 ) -> None:
     with pytest.raises(ValidationError, match=expected_message):
-        production_settings(**overrides)
+        deployed_settings(app_env, **overrides)
 
 
-def test_valid_production_configuration_is_accepted() -> None:
-    configured = production_settings()
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_valid_deployed_configuration_is_accepted(
+    app_env: AppEnvironment,
+) -> None:
+    configured = deployed_settings(app_env)
 
-    assert configured.app_env == "production"
-    assert configured.is_production is True
+    assert configured.app_env == app_env
+    assert configured.is_production is (app_env == "production")
+    assert configured.requires_secure_configuration is True
     assert configured.session_cookie_secure is True
     assert configured.site_url == "https://rennam.example"
     assert configured.allowed_host_list == ["rennam.example"]
@@ -181,12 +200,18 @@ def test_unsafe_http_boundary_configuration_is_rejected(
         Settings(_env_file=None, **{field: value})
 
 
-def test_production_requires_site_host_in_allowed_hosts() -> None:
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_deployed_environment_requires_site_host_in_allowed_hosts(
+    app_env: AppEnvironment,
+) -> None:
     with pytest.raises(
         ValidationError,
-        match="ALLOWED_HOSTS deve incluir o host de SITE_URL em production",
+        match=(
+            "ALLOWED_HOSTS deve incluir o host de SITE_URL em "
+            "staging/production"
+        ),
     ):
-        production_settings(allowed_hosts="other.example")
+        deployed_settings(app_env, allowed_hosts="other.example")
 
 
 def test_forwarded_proxy_networks_match_uvicorn_input_format() -> None:
@@ -198,7 +223,10 @@ def test_forwarded_proxy_networks_match_uvicorn_input_format() -> None:
     assert configured.forwarded_allow_ips == "127.0.0.1,10.0.0.0/24"
 
 
-def test_validation_error_does_not_expose_secrets() -> None:
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_validation_error_does_not_expose_secrets(
+    app_env: AppEnvironment,
+) -> None:
     session_secret = "session-secret-that-must-never-appear"
     password_hash = VALID_ARGON2_HASH
     database_password = "database-password-that-must-never-appear"
@@ -207,7 +235,8 @@ def test_validation_error_does_not_expose_secrets() -> None:
     )
 
     with pytest.raises(ValidationError) as error:
-        production_settings(
+        deployed_settings(
+            app_env,
             session_secret=session_secret,
             admin_password_hash=password_hash,
             database_url=database_url,
@@ -219,3 +248,20 @@ def test_validation_error_does_not_expose_secrets() -> None:
     assert password_hash not in message
     assert database_password not in message
     assert database_url not in message
+
+
+def test_public_development_example_does_not_start_staging() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            app_env="staging",
+            database_url=(
+                "postgresql+psycopg://rennam:troque-esta-senha"
+                "@localhost:5432/rennam_dev"
+            ),
+            session_secret="gere-com-openssl-rand-hex-32",
+            admin_username="rennam",
+            admin_password_hash="cole-aqui-o-hash-argon2",
+            site_url="http://127.0.0.1:8000",
+            allowed_hosts="127.0.0.1,localhost",
+            _env_file=None,
+        )

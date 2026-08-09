@@ -1,15 +1,21 @@
+import json
 import logging
 import re
+from base64 import b64decode, b64encode
 
 import pytest
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from httpx import Response
+from itsdangerous import TimestampSigner
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.core.config import settings
+from app import main as main_module
+from app.core import security as security_module
+from app.core.config import DEFAULT_SESSION_SECRET, Settings, settings
 from app.core.database import SessionLocal
-from app.core.security import require_admin
+from app.core.security import hash_password, require_admin
 from app.main import app
 from app.models import Project
 from app.routes import admin as admin_routes
@@ -93,6 +99,30 @@ PROTECTED_ADMIN_ROUTES = {
     ("POST", "/admin/projetos/{project_id}/excluir"),
 }
 
+STAGING_ADMIN_USERNAME = "staging-admin"
+STAGING_ADMIN_PASSWORD = "valid-staging-password"
+
+
+def make_staging_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[FastAPI, Settings]:
+    configured_settings = Settings(
+        app_env="staging",
+        database_url=(
+            "postgresql+psycopg://staging:discardable@db/staging_portfolio"
+        ),
+        session_secret="0123456789abcdef" * 4,
+        admin_username=STAGING_ADMIN_USERNAME,
+        admin_password_hash=hash_password(STAGING_ADMIN_PASSWORD),
+        site_url="https://staging.example",
+        allowed_hosts="staging.example",
+        _env_file=None,
+    )
+    monkeypatch.setattr(main_module, "settings", configured_settings)
+    monkeypatch.setattr(security_module, "settings", configured_settings)
+    monkeypatch.setattr(admin_routes, "settings", configured_settings)
+    return main_module.create_app(), configured_settings
+
 
 def test_all_protected_admin_routes_use_require_admin() -> None:
     routes_with_dependency = {
@@ -130,6 +160,68 @@ def test_invalid_admin_session_does_not_authorize(client):
     response = client.get("/admin", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/admin/login"
+
+
+@pytest.mark.no_database
+def test_default_signed_cookie_does_not_authorize_valid_staging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    application, configured_settings = make_staging_app(monkeypatch)
+    payload = b64encode(
+        json.dumps({"admin": configured_settings.admin_username}).encode("utf-8")
+    )
+    forged_cookie = TimestampSigner(DEFAULT_SESSION_SECRET).sign(payload).decode()
+
+    with TestClient(
+        application,
+        base_url="https://staging.example",
+    ) as staging_client:
+        response = staging_client.get(
+            "/admin/projetos/novo",
+            headers={"Cookie": f"rennam_session={forged_cookie}"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/login"
+
+
+@pytest.mark.no_database
+def test_valid_staging_configuration_allows_legitimate_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    application, configured_settings = make_staging_app(monkeypatch)
+
+    with TestClient(
+        application,
+        base_url="https://staging.example",
+    ) as staging_client:
+        login_page = staging_client.get("/admin/login")
+        response = staging_client.post(
+            "/admin/login",
+            data={
+                "csrf_token": csrf_from(login_page),
+                "username": configured_settings.admin_username,
+                "password": STAGING_ADMIN_PASSWORD,
+            },
+            follow_redirects=False,
+        )
+        signed_session = response.cookies["rennam_session"]
+        session_payload = json.loads(
+            b64decode(
+                TimestampSigner(configured_settings.session_secret).unsign(
+                    signed_session
+                )
+            )
+        )
+        protected_page = staging_client.get("/admin/projetos/novo")
+
+    assert login_page.status_code == 200
+    assert "; secure" in login_page.headers["set-cookie"].lower()
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin"
+    assert session_payload["admin"] == configured_settings.admin_username
+    assert protected_page.status_code == 200
 
 
 def test_unauthenticated_request_does_not_reach_repository(client, monkeypatch):

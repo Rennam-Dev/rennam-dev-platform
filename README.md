@@ -14,7 +14,7 @@ temporariamente desabilitada até existir arquivamento e restauração seguros.
 - páginas públicas em `/projetos/{slug}`;
 - filtro por tecnologia;
 - painel protegido por sessão;
-- cookie `HttpOnly`, `SameSite=Lax` e `Secure` em produção;
+- cookie `HttpOnly`, `SameSite=Lax` e `Secure` em staging/production;
 - proteção CSRF em todas as mutações administrativas;
 - senha com hash Argon2;
 - estados `draft` e `published`;
@@ -60,6 +60,10 @@ Requisitos: Docker e Docker Compose.
    ```bash
    cp .env.example .env
    ```
+
+   Esse arquivo contém somente placeholders de development. Ele não é um
+   perfil implantável e deve falhar se `APP_ENV` for apenas trocado para
+   `staging` ou `production` sem substituir os valores sensíveis.
 
 2. Gere o segredo de sessão:
 
@@ -171,17 +175,18 @@ alembic upgrade head
 - Nunca comite `.env`.
 - `APP_ENV` aceita somente `development`, `test`, `staging` ou `production`,
   sem variações de caixa ou espaços.
-- Em produção, a aplicação exige no startup: `SESSION_SECRET` com pelo menos
-  32 caracteres e diferente do default, `ADMIN_PASSWORD_HASH` em formato
-  Argon2, `ADMIN_USERNAME` não vazio, PostgreSQL em `DATABASE_URL` e
-  `SITE_URL` HTTPS sem query string ou fragment.
+- Em staging e production, a aplicação exige no startup: `SESSION_SECRET` com
+  pelo menos 32 caracteres e diferente do default, `ADMIN_PASSWORD_HASH` em
+  formato Argon2, `ADMIN_USERNAME` não vazio, PostgreSQL em `DATABASE_URL` e
+  `SITE_URL` HTTPS sem credenciais, query string ou fragment. O hostname de
+  `SITE_URL` deve estar em `ALLOWED_HOSTS`.
 - O painel usa sessão, não JWT, porque é uma aplicação renderizada no servidor.
 - O Markdown é sanitizado antes de ser exibido.
 - Imagens serão armazenadas em object storage; o banco guardará somente URLs e
   metadados.
-- Antes do deploy público, configure `ALLOWED_HOSTS`, restrinja
-  `FORWARDED_ALLOW_IPS` ao proxy controlado e publique production somente por
-  HTTPS.
+- Antes de qualquer deploy staging/production, configure `ALLOWED_HOSTS`,
+  restrinja `FORWARDED_ALLOW_IPS` ao proxy controlado e publique o ambiente
+  somente por HTTPS.
 
 ## Próximas versões
 

@@ -3,10 +3,25 @@
 ## Identidade
 
 - Senhas com Argon2.
-- Sessões em cookies `HttpOnly`, `Secure` em produção e `SameSite` adequado.
+- Sessões em cookies `HttpOnly`, `Secure` em staging/production e `SameSite`
+  adequado.
 - Rotação de sessão no login.
 - CSRF em operações de escrita.
 - Recuperação de senha e convites com tokens aleatórios, expirados e armazenados como hash.
+
+### Configuração de ambientes implantáveis
+
+Staging e production usam a mesma política fail-closed de configuração
+sensível. Ambos exigem segredo de sessão explícito, não default e com ao menos
+32 caracteres; username administrativo não vazio; hash Argon2 estruturalmente
+válido; PostgreSQL; `SITE_URL` HTTPS absoluta; e o hostname do site em
+`ALLOWED_HOSTS`. Wildcards de host e confiança global de proxy continuam
+proibidos.
+
+Development e test podem manter defaults locais. Os placeholders públicos de
+`.env.example` pertencem somente a development e não iniciam staging/production
+sem substituição. Mensagens de validação não incluem segredo de sessão, hash,
+senha, cookie ou URL completa do banco.
 
 ### Proteção do login administrativo
 
@@ -46,7 +61,7 @@ para preservar o comportamento atual.
 ### Hosts e headers de segurança
 
 Toda requisição deve usar um host listado explicitamente em `ALLOWED_HOSTS`.
-Wildcards são rejeitados, e em `production` a lista deve incluir exatamente o
+Wildcards são rejeitados, e em staging/production a lista deve incluir o
 hostname de `SITE_URL`.
 
 As respostas recebem `X-Content-Type-Options: nosniff`,
