@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.logging import AUTH_LOGGER_NAME
 from app.core.security import (
     ensure_csrf_token,
     is_admin,
@@ -28,7 +29,7 @@ from app.web import templates
 router = APIRouter(prefix="/admin")
 DBSession = Annotated[Session, Depends(get_db)]
 AdminAccess = Annotated[None, Depends(require_admin)]
-logger = logging.getLogger("rennam.admin_auth")
+logger = logging.getLogger(AUTH_LOGGER_NAME)
 project_logger = logging.getLogger("rennam.admin_projects")
 login_rate_limiter = LoginRateLimiter(
     max_failures=settings.admin_login_max_failures,

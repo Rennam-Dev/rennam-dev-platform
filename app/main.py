@@ -5,10 +5,12 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import BASE_DIR, settings
 from app.core.http import SecurityHeadersMiddleware
+from app.core.logging import configure_auth_logging
 from app.routes import admin, public
 
 
 def create_app() -> FastAPI:
+    configure_auth_logging()
     application = FastAPI(
         title="rennam.dev",
         description="Portfólio técnico e mini-CMS autoral.",

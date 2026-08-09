@@ -48,6 +48,9 @@ Os eventos `admin_login_success`, `admin_login_failure` e
 `admin_login_rate_limited` registram apenas evento, timestamp do logging, IP
 normalizado, path e resultado. Username, senha, hash, cookie, sessão, CSRF,
 headers de autorização, URL do banco e corpo do formulário não são registrados.
+O logger dedicado `rennam.admin_auth` opera em nível `INFO` e emite uma única
+linha estruturada em chave-valor para o stdout padrão do container, sem exigir
+configuração manual adicional e sem substituir o logging do Uvicorn.
 
 ## Fronteira HTTP
 

@@ -2,6 +2,8 @@ import json
 import logging
 import re
 from base64 import b64decode, b64encode
+from collections import Counter
+from io import StringIO
 
 import pytest
 from fastapi import FastAPI
@@ -15,6 +17,7 @@ from app import main as main_module
 from app.core import security as security_module
 from app.core.config import DEFAULT_SESSION_SECRET, Settings, settings
 from app.core.database import SessionLocal
+from app.core.logging import AUTH_HANDLER_NAME, AUTH_LOGGER_NAME
 from app.core.security import hash_password, require_admin
 from app.main import app
 from app.models import Project
@@ -607,10 +610,17 @@ def test_rate_limiter_uses_ip_supplied_by_trusted_proxy() -> None:
         assert attempt("test-password", other_forwarded_client).status_code == 303
 
 
-def test_login_audit_events_are_sanitized(client, caplog):
+def test_login_audit_events_are_emitted_once_and_sanitized(client, monkeypatch):
     password = "never-log-this-password"
     session_cookie = client.get("/admin/login").cookies.get("rennam_session")
-    caplog.set_level(logging.INFO, logger="rennam.admin_auth")
+    logger = logging.getLogger(AUTH_LOGGER_NAME)
+    handler = next(
+        handler
+        for handler in logger.handlers
+        if handler.get_name() == AUTH_HANDLER_NAME
+    )
+    output_stream = StringIO()
+    monkeypatch.setattr(handler, "stream", output_stream)
 
     assert login_attempt(client, password=password).status_code == 401
     assert login_attempt(client, password="test-password").status_code == 303
@@ -620,21 +630,32 @@ def test_login_audit_events_are_sanitized(client, caplog):
         assert login_attempt(client, password=password).status_code == 401
     assert login_attempt(client, password=password).status_code == 429
 
-    records = [
-        record
-        for record in caplog.records
-        if record.name == "rennam.admin_auth"
+    lines = [
+        line
+        for line in output_stream.getvalue().splitlines()
+        if f"logger={AUTH_LOGGER_NAME}" in line
     ]
-    assert {record.event for record in records} == {
-        "admin_login_success",
-        "admin_login_failure",
-        "admin_login_rate_limited",
-    }
-    serialized_records = " ".join(
-        f"{record.getMessage()} {record.__dict__!r}" for record in records
+    events = Counter(
+        match.group(1)
+        for line in lines
+        if (match := re.search(r"\bevent=([^ ]+)", line))
     )
-    assert password not in serialized_records
-    assert settings.admin_password_hash not in serialized_records
-    assert session_cookie not in serialized_records
-    assert "rennam_session" not in serialized_records
-    assert "csrf_token" not in serialized_records
+
+    assert events == {
+        "admin_login_success": 1,
+        "admin_login_failure": settings.admin_login_max_failures + 1,
+        "admin_login_rate_limited": 1,
+    }
+    assert len(lines) == sum(events.values())
+    assert all("level=INFO" in line for line in lines)
+    assert all("path=/admin/login" in line for line in lines)
+
+    output = "\n".join(lines)
+    assert password not in output
+    assert settings.admin_password_hash not in output
+    assert settings.session_secret not in output
+    assert settings.database_url not in output
+    assert session_cookie not in output
+    assert "rennam_session" not in output
+    assert "csrf_token" not in output
+    assert "authorization" not in output.lower()
