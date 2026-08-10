@@ -1,8 +1,15 @@
 # Plano de estabilização v0.2.1
 
+> **Status atual: concluído — snapshot histórico.** As tarefas P0.1–P1.5 foram
+> implementadas. A auditoria pós-estabilização encontrou três lacunas adicionais,
+> tratadas por R1–R3 e confirmadas em
+> [TECHNICAL_AUDIT_REMEDIATION_CONFIRMATION_V0.2.1.md](../audits/TECHNICAL_AUDIT_REMEDIATION_CONFIRMATION_V0.2.1.md).
+> O texto abaixo preserva o plano original e sua trilha de decisão; descrições no
+> futuro representam o estado no momento do planejamento.
+
 **Origem:** `docs/audits/TECHNICAL_AUDIT_V0.2.md`
 **Escopo:** somente achados P0 e P1 da auditoria
-**Estado:** proposto; nenhuma tarefa deste documento está implementada
+**Estado no momento da redação:** proposto; nenhuma tarefa estava implementada
 **Regra de execução:** cada tarefa deve ser implementada, revisada e validada separadamente, sem avançar enquanto seus critérios de aceite não forem satisfeitos
 
 ## 1. Objetivo da versão

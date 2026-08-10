@@ -1,13 +1,23 @@
 # Segurança
 
+**Estado:** os controles explicitamente marcados como implementados descrevem a
+v0.2.1. Os blocos “Planejado” são requisitos futuros e não devem ser
+interpretados como funcionalidade existente ou autorização de produção.
+
 ## Identidade
+
+### Implementado na v0.2.1
 
 - Senhas com Argon2.
 - Sessões em cookies `HttpOnly`, `Secure` em staging/production e `SameSite`
   adequado.
 - Rotação de sessão no login.
 - CSRF em operações de escrita.
-- Recuperação de senha e convites com tokens aleatórios, expirados e armazenados como hash.
+
+### Planejado, não implementado
+
+- Recuperação de senha e convites com tokens aleatórios, expirados e
+  armazenados como hash.
 
 ### Configuração de ambientes implantáveis
 
@@ -97,14 +107,18 @@ pelo cliente antes de encaminhar `X-Forwarded-For` e `X-Forwarded-Proto`.
 redes amplas ou preservar headers do cliente permitiria falsificação de IP e
 enfraqueceria o rate limiting.
 
-## Autorização
+## Autorização planejada, não implementada
 
 - Papéis administrativos separados de usuários demo.
 - Acesso concedido por Lab, prazo e quota.
 - Negação por padrão.
-- Logs de concessão, revogação, login e uso.
+- Logs de concessão, revogação e uso.
 
-## Proteção de LLM
+O painel atual possui um único administrador e nega acesso por padrão por meio
+da sessão administrativa. Papéis, usuários demo, Labs e concessões pertencem ao
+roadmap futuro.
+
+## Proteção de LLM planejada, não implementada
 
 - Chaves somente no servidor.
 - Rate limit, limite de requisições, tokens e orçamento.
@@ -113,13 +127,18 @@ enfraqueceria o rate limiting.
 
 ## Conteúdo e uploads
 
-- Sanitização de Markdown/HTML.
-- Validação de MIME, extensão, tamanho e dimensões.
-- Storage externo em produção; banco guarda metadados.
+**Implementado na v0.2.1:** sanitização de Markdown/HTML.
 
-## Operação
+**Planejado, não implementado:** upload com validação de MIME, extensão, tamanho
+e dimensões; storage externo com apenas metadados no banco.
+
+## Requisitos operacionais antes de produção
 
 - Segredos por variáveis de ambiente ou secret manager.
 - Backups do banco e mídia com teste de restauração.
 - Dependências e imagens Docker atualizadas de forma controlada.
 - Auditoria de segurança antes do deploy e após funcionalidades sensíveis.
+
+Esses itens são baseline operacional P2. Não foram comprovados por deploy,
+proxy real, restauração de backup ou monitoramento e impedem classificar a base
+como pronta para produção.

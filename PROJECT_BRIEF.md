@@ -1,5 +1,9 @@
 # Brief para revisão arquitetural — rennam.dev
 
+> **Status:** documento fundacional atualizado para refletir a v0.2.1. A
+> exclusão definitiva permanece bloqueada e os recursos listados em “Fora do
+> escopo” continuam planejados, não implementados.
+
 ## Decisão central
 
 O `rennam.dev` é o **Projeto 0**: portfólio, laboratório público e plataforma
@@ -17,13 +21,15 @@ Substituir o catálogo fixo em arquivos Python por um mini-CMS autoral com:
 - SQLAlchemy 2.0;
 - Alembic;
 - autenticação por sessão;
-- CRUD de projetos;
+- gestão administrativa de projetos, sem hard delete;
 - conteúdo longo em Markdown sanitizado.
 
 ## Usuários
 
 - Visitante: acessa apenas projetos publicados.
-- Administrador: apenas Rennam; cadastra, edita, publica e exclui projetos.
+- Administrador: apenas Rennam; cadastra, edita e publica projetos. A exclusão
+  definitiva está bloqueada até existir uma política segura de arquivamento e
+  restauração.
 
 Não haverá cadastro público, múltiplos usuários, papéis ou permissões nesta
 fase.
@@ -53,7 +59,7 @@ fase.
 
 - sessão assinada em cookie `HttpOnly`;
 - `SameSite=Lax`;
-- `Secure` em produção;
+- `Secure` em staging e production;
 - CSRF nas requisições de escrita;
 - hash Argon2 da senha;
 - segredo e hash somente no `.env`;

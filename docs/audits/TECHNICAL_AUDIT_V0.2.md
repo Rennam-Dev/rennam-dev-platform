@@ -1,5 +1,11 @@
 # Auditoria técnica da base v0.2
 
+> **Status: snapshot histórico, substituído quanto à classificação atual.** Este relatório
+> descreve a base anterior à estabilização. Os achados P0/P1 foram tratados na
+> v0.2.1; a situação atual e as remediações R1–R3 estão confirmadas em
+> [TECHNICAL_AUDIT_REMEDIATION_CONFIRMATION_V0.2.1.md](TECHNICAL_AUDIT_REMEDIATION_CONFIRMATION_V0.2.1.md).
+> A conclusão original abaixo permanece preservada como evidência histórica.
+
 **Data:** 2026-08-07
 **Escopo:** estado `3a9f0c7` da branch `master`
 **Modo:** inspeção somente leitura da aplicação; este relatório é o único arquivo criado

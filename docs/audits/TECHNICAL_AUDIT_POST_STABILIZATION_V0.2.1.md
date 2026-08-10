@@ -1,5 +1,11 @@
 # Auditoria técnica pós-estabilização v0.2.1
 
+> **Status: snapshot histórico, substituído quanto à classificação atual.** A classificação A e
+> os achados R1, R2 e R3 deste relatório motivaram remediações posteriores. A
+> confirmação independente mais recente classificou os três como resolvidos e a
+> base como **B — pronta para evoluir, mas não para produção**. Consulte
+> [TECHNICAL_AUDIT_REMEDIATION_CONFIRMATION_V0.2.1.md](TECHNICAL_AUDIT_REMEDIATION_CONFIRMATION_V0.2.1.md).
+
 **Data da revisão:** 8 de agosto de 2026
 
 **Base auditada:** `master` em `291a868` (`security: harden http and production exposure`)

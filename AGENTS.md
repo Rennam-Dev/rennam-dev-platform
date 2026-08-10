@@ -6,7 +6,9 @@
 
 ## Fase atual
 
-Auditoria e estabilização da base v0.2.
+Fundação v0.2.1 estabilizada, com remediações R1–R3 confirmadas e preparação
+para publicação do repositório. A base está pronta para evolução funcional,
+mas não está classificada como pronta para produção. A v0.3 ainda não começou.
 
 Não implemente funcionalidades futuras sem tarefa explícita e aprovação do plano.
 
