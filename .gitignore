@@ -1,11 +1,64 @@
+# Environment and local secrets
 .env
+.env.*
+!.env.example
+
+# Python environments and caches
 .venv/
+venv/
+env/
 __pycache__/
 *.py[cod]
-*.db
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+
+# Coverage and build artifacts
 .coverage
+.coverage.*
 htmlcov/
 dist/
 build/
+*.egg-info/
+.eggs/
+wheels/
+
+# Editors and operating-system state
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs, temporary files and local databases
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+tmp/
+temp/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Database dumps and backups
+backups/
+dumps/
+*.bak
+*.backup
+*.dump
+*.sql.gz
+
+# Private cryptographic material
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519

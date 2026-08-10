@@ -20,7 +20,7 @@ services:
       DATABASE_URL: postgresql+psycopg://rennam:${POSTGRES_PASSWORD:-dev-only-change-me}@db:5432/rennam_dev
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
