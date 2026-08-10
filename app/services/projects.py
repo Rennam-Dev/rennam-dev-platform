@@ -1,6 +1,7 @@
 import re
 import unicodedata
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Project, Technology
@@ -9,6 +10,14 @@ from app.schemas.project import ProjectForm
 
 
 class ProjectSlugImmutableError(ValueError):
+    pass
+
+
+class ProjectConflictError(ValueError):
+    pass
+
+
+class ProjectTechnologyError(ValueError):
     pass
 
 
@@ -31,12 +40,31 @@ def parse_technologies(raw: str) -> list[str]:
     return list(unique.values())
 
 
+def prepare_technologies(raw: str) -> list[tuple[str, str]]:
+    prepared: list[tuple[str, str]] = []
+    names_by_slug: dict[str, str] = {}
+    for name in parse_technologies(raw):
+        technology_slug = slugify(name)
+        if not technology_slug:
+            raise ProjectTechnologyError(
+                "technologies: nome inválido; informe ao menos uma letra ou número."
+            )
+        if technology_slug in names_by_slug:
+            raise ProjectTechnologyError(
+                "technologies: nomes diferentes não podem gerar o mesmo slug."
+            )
+        names_by_slug[technology_slug] = name
+        prepared.append((name, technology_slug))
+    return prepared
+
+
 def sync_technologies(
-    db: Session, project: Project, raw_technologies: str
+    db: Session,
+    project: Project,
+    technologies_data: list[tuple[str, str]],
 ) -> None:
     technologies: list[Technology] = []
-    for name in parse_technologies(raw_technologies):
-        technology_slug = slugify(name)
+    for name, technology_slug in technologies_data:
         technology = project_repository.get_technology_by_slug(db, technology_slug)
         if technology is None:
             technology = Technology(name=name, slug=technology_slug)
@@ -46,12 +74,26 @@ def sync_technologies(
 
 
 def create_project(db: Session, form: ProjectForm) -> Project:
-    project = Project(**form.as_model_data())
-    sync_technologies(db, project, form.technologies)
-    project_repository.add_project(db, project)
-    db.commit()
-    project_repository.refresh_project(db, project)
-    return project
+    technologies_data = prepare_technologies(form.technologies)
+    try:
+        if project_repository.get_by_slug(db, form.slug) is not None:
+            raise ProjectConflictError(
+                "slug: já está sendo usado por outro projeto."
+            )
+        project = Project(**form.as_model_data())
+        sync_technologies(db, project, technologies_data)
+        project_repository.add_project(db, project)
+        project_repository.flush(db)
+        db.commit()
+        return project
+    except IntegrityError:
+        db.rollback()
+        raise ProjectConflictError(
+            "Não foi possível salvar devido a um conflito de persistência."
+        ) from None
+    except Exception:
+        db.rollback()
+        raise
 
 
 def update_project(db: Session, project: Project, form: ProjectForm) -> Project:
@@ -60,14 +102,24 @@ def update_project(db: Session, project: Project, form: ProjectForm) -> Project:
             "slug: não pode ser alterado após a criação."
         )
 
-    model_data = form.as_model_data()
-    model_data.pop("slug")
-    for field, value in model_data.items():
-        setattr(project, field, value)
-    sync_technologies(db, project, form.technologies)
-    db.commit()
-    project_repository.refresh_project(db, project)
-    return project
+    technologies_data = prepare_technologies(form.technologies)
+    try:
+        model_data = form.as_model_data()
+        model_data.pop("slug")
+        for field, value in model_data.items():
+            setattr(project, field, value)
+        sync_technologies(db, project, technologies_data)
+        project_repository.flush(db)
+        db.commit()
+        return project
+    except IntegrityError:
+        db.rollback()
+        raise ProjectConflictError(
+            "Não foi possível salvar devido a um conflito de persistência."
+        ) from None
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_project(db: Session, project: Project) -> None:

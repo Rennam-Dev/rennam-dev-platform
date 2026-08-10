@@ -70,8 +70,8 @@ def add_project(db: Session, project: Project) -> None:
     db.add(project)
 
 
-def refresh_project(db: Session, project: Project) -> None:
-    db.refresh(project)
+def flush(db: Session) -> None:
+    db.flush()
 
 
 def list_technologies(db: Session) -> list[Technology]:

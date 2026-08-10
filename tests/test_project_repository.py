@@ -43,7 +43,7 @@ def test_get_technology_by_slug_returns_none_when_missing() -> None:
         assert project_repository.get_technology_by_slug(db, "missing") is None
 
 
-def test_repository_adds_and_refreshes_without_ending_transaction() -> None:
+def test_repository_adds_and_flushes_without_ending_transaction() -> None:
     with SessionLocal() as db:
         transaction = db.begin()
         technology = Technology(name="PostgreSQL", slug="postgresql")
@@ -60,10 +60,7 @@ def test_repository_adds_and_refreshes_without_ending_transaction() -> None:
         assert technology.id is None
         assert project.id is None
 
-        # M3.3 does not introduce a runtime flush. The caller flushes here only
-        # to inspect the pending writes while retaining the same transaction.
-        db.flush()
-        project_repository.refresh_project(db, project)
+        project_repository.flush(db)
 
         assert db.get_transaction() is transaction
         assert transaction.is_active

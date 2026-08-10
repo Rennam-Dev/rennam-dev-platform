@@ -529,6 +529,40 @@ def test_project_slug_remains_unique_on_creation(client):
     assert "já está sendo usado por outro projeto" in response.text
 
 
+@pytest.mark.parametrize(
+    ("technologies", "message"),
+    [
+        ("+++", "nome inválido"),
+        ("C++, C#", "nomes diferentes não podem gerar o mesmo slug"),
+    ],
+)
+def test_invalid_project_technologies_return_controlled_validation_error(
+    client,
+    technologies,
+    message,
+):
+    login(client)
+    form_page = client.get("/admin/projetos/novo")
+    data = project_data(csrf_from(form_page))
+    data["technologies"] = technologies
+
+    response = client.post(
+        "/admin/projetos/novo",
+        data=data,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert message in response.text
+    with SessionLocal() as db:
+        assert (
+            admin_routes.project_repository.get_by_slug(
+                db, "rennam-semantic-docs"
+            )
+            is None
+        )
+
+
 def test_project_edit_rejects_invalid_csrf_before_repository(client, monkeypatch):
     login(client)
 

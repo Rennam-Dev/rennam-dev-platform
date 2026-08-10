@@ -6,7 +6,6 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -226,18 +225,17 @@ async def create_project(request: Request, _admin: AdminAccess, db: DBSession):
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
     form, values, errors = validate_project_form(data)
-    if form and project_repository.get_by_slug(db, form.slug):
-        errors.append("slug: já está sendo usado por outro projeto.")
-        form = None
     if form:
         try:
             project = project_service.create_project(db, form)
             return RedirectResponse(
                 f"/admin/projetos/{project.id}/editar?saved=1", status_code=303
             )
-        except IntegrityError:
-            db.rollback()
-            errors.append("Não foi possível salvar: valor único duplicado.")
+        except (
+            project_service.ProjectConflictError,
+            project_service.ProjectTechnologyError,
+        ) as error:
+            errors.append(str(error))
     return templates.TemplateResponse(
         request=request,
         name="admin/project_form.html",
@@ -300,9 +298,11 @@ async def update_project(
         except project_service.ProjectSlugImmutableError as error:
             errors.append(str(error))
             values["slug"] = project.slug
-        except IntegrityError:
-            db.rollback()
-            errors.append("Não foi possível salvar: valor único duplicado.")
+        except (
+            project_service.ProjectConflictError,
+            project_service.ProjectTechnologyError,
+        ) as error:
+            errors.append(str(error))
     return templates.TemplateResponse(
         request=request,
         name="admin/project_form.html",
