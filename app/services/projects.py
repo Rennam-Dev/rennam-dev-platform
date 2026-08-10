@@ -1,10 +1,10 @@
 import re
 import unicodedata
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Project, Technology
+from app.repositories import projects as project_repository
 from app.schemas.project import ProjectForm
 
 
@@ -37,12 +37,10 @@ def sync_technologies(
     technologies: list[Technology] = []
     for name in parse_technologies(raw_technologies):
         technology_slug = slugify(name)
-        technology = db.scalar(
-            select(Technology).where(Technology.slug == technology_slug)
-        )
+        technology = project_repository.get_technology_by_slug(db, technology_slug)
         if technology is None:
             technology = Technology(name=name, slug=technology_slug)
-            db.add(technology)
+            project_repository.add_technology(db, technology)
         technologies.append(technology)
     project.technologies = technologies
 
@@ -50,9 +48,9 @@ def sync_technologies(
 def create_project(db: Session, form: ProjectForm) -> Project:
     project = Project(**form.as_model_data())
     sync_technologies(db, project, form.technologies)
-    db.add(project)
+    project_repository.add_project(db, project)
     db.commit()
-    db.refresh(project)
+    project_repository.refresh_project(db, project)
     return project
 
 
@@ -68,7 +66,7 @@ def update_project(db: Session, project: Project, form: ProjectForm) -> Project:
         setattr(project, field, value)
     sync_technologies(db, project, form.technologies)
     db.commit()
-    db.refresh(project)
+    project_repository.refresh_project(db, project)
     return project
 
 

@@ -58,6 +58,22 @@ def get_by_id(db: Session, project_id: int) -> Project | None:
     return db.scalar(statement)
 
 
+def get_technology_by_slug(db: Session, slug: str) -> Technology | None:
+    return db.scalar(select(Technology).where(Technology.slug == slug))
+
+
+def add_technology(db: Session, technology: Technology) -> None:
+    db.add(technology)
+
+
+def add_project(db: Session, project: Project) -> None:
+    db.add(project)
+
+
+def refresh_project(db: Session, project: Project) -> None:
+    db.refresh(project)
+
+
 def list_technologies(db: Session) -> list[Technology]:
     statement = (
         select(Technology)
