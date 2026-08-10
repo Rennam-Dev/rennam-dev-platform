@@ -387,6 +387,59 @@ def test_admin_can_create_project(client):
     assert "pgvector" in public_page.text
 
 
+def test_project_validation_error_redisplays_submitted_values(client):
+    login(client)
+    create_page = client.get("/admin/projetos/novo")
+    data = project_data(csrf_from(create_page), title="ab")
+    data.update(
+        {
+            "problem": "Problema digitado deve permanecer no formulário.",
+            "featured": "on",
+            "repo_url": "https://example.com/submitted-project",
+        }
+    )
+
+    response = client.post(
+        "/admin/projetos/novo",
+        data=data,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert 'name="title" value="ab"' in response.text
+    assert "Problema digitado deve permanecer no formulário." in response.text
+    assert 'value="https://example.com/submitted-project"' in response.text
+    assert re.search(r'name="featured"[^>]* checked', response.text)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("status", "unknown"),
+        ("visibility", "private"),
+        ("slug", "Slug Inválido"),
+    ],
+)
+def test_invalid_project_control_fields_remain_validation_errors(
+    client,
+    field,
+    value,
+):
+    login(client)
+    create_page = client.get("/admin/projetos/novo")
+    data = project_data(csrf_from(create_page))
+    data[field] = value
+
+    response = client.post(
+        "/admin/projetos/novo",
+        data=data,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert f"{field}:" in response.text
+
+
 def test_admin_can_update_project_while_preserving_slug(client):
     login(client)
     project_id = create_project(client)
@@ -476,11 +529,19 @@ def test_project_slug_remains_unique_on_creation(client):
     assert "já está sendo usado por outro projeto" in response.text
 
 
-def test_project_edit_still_requires_csrf(client):
+def test_project_edit_rejects_invalid_csrf_before_repository(client, monkeypatch):
     login(client)
-    project_id = create_project(client)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("repository should not be called before CSRF validation")
+
+    monkeypatch.setattr(
+        admin_routes.project_repository,
+        "get_by_id",
+        fail_if_called,
+    )
     response = client.post(
-        f"/admin/projetos/{project_id}/editar",
+        "/admin/projetos/999/editar",
         data=project_data(""),
         follow_redirects=False,
     )

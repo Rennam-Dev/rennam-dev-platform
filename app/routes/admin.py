@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+from collections.abc import Mapping
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
@@ -121,32 +122,12 @@ def form_values(project=None) -> dict[str, Any]:
     return values
 
 
-async def read_project_form(
-    request: Request,
-) -> tuple[ProjectForm | None, dict, list[str]]:
-    raw = await request.form()
-    values = {
-        "title": raw.get("title", ""),
-        "slug": raw.get("slug", ""),
-        "summary": raw.get("summary", ""),
-        "problem": raw.get("problem", ""),
-        "solution": raw.get("solution", ""),
-        "architecture": raw.get("architecture", ""),
-        "decisions": raw.get("decisions", ""),
-        "results": raw.get("results", ""),
-        "learnings": raw.get("learnings", ""),
-        "course": raw.get("course", ""),
-        "status": raw.get("status", "planned"),
-        "visibility": raw.get("visibility", "draft"),
-        "featured": raw.get("featured") == "on",
-        "technologies": raw.get("technologies", ""),
-        "repo_url": raw.get("repo_url") or None,
-        "demo_url": raw.get("demo_url") or None,
-        "cover_image_url": raw.get("cover_image_url") or None,
-        "seo_description": raw.get("seo_description", ""),
-    }
+def validate_project_form(
+    raw: Mapping[str, object],
+) -> tuple[ProjectForm | None, dict[str, object], list[str]]:
+    values = ProjectForm.values_from_mapping(raw)
     try:
-        return ProjectForm.model_validate(values), values, []
+        return ProjectForm.from_mapping(raw), values, []
     except ValidationError as error:
         messages = [
             f"{'.'.join(str(part) for part in item['loc'])}: {item['msg']}"
@@ -244,7 +225,7 @@ def new_project_page(request: Request, _admin: AdminAccess):
 async def create_project(request: Request, _admin: AdminAccess, db: DBSession):
     data = await request.form()
     validate_csrf(request, str(data.get("csrf_token", "")))
-    form, values, errors = await read_project_form(request)
+    form, values, errors = validate_project_form(data)
     if form and project_repository.get_by_slug(db, form.slug):
         errors.append("slug: já está sendo usado por outro projeto.")
         form = None
@@ -304,12 +285,12 @@ async def update_project(
     project_id: int,
     db: DBSession,
 ):
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
     project = project_repository.get_by_id(db, project_id)
     if project is None:
         return RedirectResponse("/admin", status_code=303)
-    data = await request.form()
-    validate_csrf(request, str(data.get("csrf_token", "")))
-    form, values, errors = await read_project_form(request)
+    form, values, errors = validate_project_form(data)
     if form:
         try:
             project_service.update_project(db, project, form)
