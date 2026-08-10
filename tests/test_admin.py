@@ -4,9 +4,10 @@ import re
 from base64 import b64decode, b64encode
 from collections import Counter
 from io import StringIO
+from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -92,15 +93,21 @@ def create_project(client, *, visibility: str = "published") -> int:
     return int(match.group(1))
 
 
-PROTECTED_ADMIN_ROUTES = {
+PUBLIC_ADMIN_ROUTES = frozenset(
+    {
+        ("GET", "/admin/login"),
+        ("POST", "/admin/login"),
+    }
+)
+CURRENT_PROTECTED_ADMIN_REQUESTS = (
     ("GET", "/admin"),
     ("POST", "/admin/logout"),
     ("GET", "/admin/projetos/novo"),
     ("POST", "/admin/projetos/novo"),
-    ("GET", "/admin/projetos/{project_id}/editar"),
-    ("POST", "/admin/projetos/{project_id}/editar"),
-    ("POST", "/admin/projetos/{project_id}/excluir"),
-}
+    ("GET", "/admin/projetos/999/editar"),
+    ("POST", "/admin/projetos/999/editar"),
+    ("POST", "/admin/projetos/999/excluir"),
+)
 
 STAGING_ADMIN_USERNAME = "staging-admin"
 STAGING_ADMIN_PASSWORD = "valid-staging-password"
@@ -127,35 +134,136 @@ def make_staging_app(
     return main_module.create_app(), configured_settings
 
 
-def test_all_protected_admin_routes_use_require_admin() -> None:
-    routes_with_dependency = {
-        (method, route.path)
-        for route in admin_routes.router.routes
-        if isinstance(route, APIRoute)
+def admin_route_inventory(
+    application: FastAPI,
+) -> list[tuple[tuple[str, str], Any]]:
+    # APIRoute.methods contains the methods declared by the application in the
+    # pinned FastAPI version. Do not discard HEAD/OPTIONS here: if either is
+    # exposed as a real admin route, it must not be silently removed from the
+    # authorization contract.
+    inventory: list[tuple[tuple[str, str], Any]] = []
+    for registered_route in application.routes:
+        # FastAPI 0.141 keeps included routers lazy. Their effective contexts
+        # preserve the final path and dependencies contributed at inclusion.
+        context_factory = getattr(
+            registered_route,
+            "effective_route_contexts",
+            None,
+        )
+        candidates = (
+            context_factory() if callable(context_factory) else (registered_route,)
+        )
+        for route in candidates:
+            original_route = getattr(route, "original_route", route)
+            if not isinstance(original_route, APIRoute):
+                continue
+            if route.path != "/admin" and not route.path.startswith("/admin/"):
+                continue
+            inventory.extend(
+                ((method, route.path), route)
+                for method in sorted(route.methods or ())
+            )
+    return inventory
+
+
+def assert_admin_route_access_contract(application: FastAPI) -> None:
+    inventory = admin_route_inventory(application)
+    inventory_keys = {route_key for route_key, _route in inventory}
+    missing_public_routes = PUBLIC_ADMIN_ROUTES - inventory_keys
+    assert not missing_public_routes, (
+        "Rotas admin públicas esperadas não foram registradas: "
+        f"{sorted(missing_public_routes)}"
+    )
+
+    protected_public_routes = {
+        route_key
+        for route_key, route in inventory
+        if route_key in PUBLIC_ADMIN_ROUTES
         and any(
             dependency.call is require_admin
             for dependency in route.dependant.dependencies
         )
-        for method in route.methods
     }
-    assert routes_with_dependency == PROTECTED_ADMIN_ROUTES
+    assert not protected_public_routes, (
+        "A allowlist pública de login não deve exigir require_admin: "
+        f"{sorted(protected_public_routes)}"
+    )
+
+    unprotected_routes = {
+        route_key
+        for route_key, route in inventory
+        if route_key not in PUBLIC_ADMIN_ROUTES
+        and not any(
+            dependency.call is require_admin
+            for dependency in route.dependant.dependencies
+        )
+    }
+    formatted_routes = ", ".join(
+        f"{method} {path}" for method, path in sorted(unprotected_routes)
+    )
+    assert not unprotected_routes, (
+        "Rotas admin fora da allowlist pública devem exigir require_admin: "
+        f"{formatted_routes}"
+    )
 
 
-def test_protected_admin_routes_redirect_without_session(client):
-    requests = [
-        ("GET", "/admin"),
-        ("POST", "/admin/logout"),
-        ("GET", "/admin/projetos/novo"),
-        ("POST", "/admin/projetos/novo"),
-        ("GET", "/admin/projetos/999/editar"),
-        ("POST", "/admin/projetos/999/editar"),
-        ("POST", "/admin/projetos/999/excluir"),
-    ]
+@pytest.mark.no_database
+def test_admin_route_inventory_requires_admin_by_default() -> None:
+    assert_admin_route_access_contract(app)
 
-    for method, path in requests:
-        response = client.request(method, path, follow_redirects=False)
-        assert response.status_code == 303
-        assert response.headers["location"] == "/admin/login"
+
+@pytest.mark.no_database
+def test_admin_route_contract_detects_unprotected_future_routes() -> None:
+    temporary_router = APIRouter(prefix="/admin")
+
+    @temporary_router.get("/artigos")
+    def unprotected_articles() -> dict[str, bool]:
+        return {"ok": True}
+
+    @temporary_router.post("/artigos/novo")
+    def unprotected_new_article() -> dict[str, bool]:
+        return {"ok": True}
+
+    temporary_app = FastAPI()
+    temporary_app.include_router(admin_routes.router)
+    temporary_app.include_router(temporary_router)
+
+    with pytest.raises(AssertionError) as error:
+        assert_admin_route_access_contract(temporary_app)
+
+    message = str(error.value)
+    assert "GET /admin/artigos" in message
+    assert "POST /admin/artigos/novo" in message
+
+
+def test_login_routes_remain_public_without_admin_session(client):
+    login_page = client.get("/admin/login", follow_redirects=False)
+    assert login_page.status_code == 200
+
+    missing_csrf = client.post(
+        "/admin/login",
+        data={"username": "rennam", "password": "invalid-password"},
+        follow_redirects=False,
+    )
+    assert missing_csrf.status_code == 403
+
+    invalid_credentials = client.post(
+        "/admin/login",
+        data={
+            "csrf_token": csrf_from(login_page),
+            "username": "rennam",
+            "password": "invalid-password",
+        },
+        follow_redirects=False,
+    )
+    assert invalid_credentials.status_code == 401
+
+
+@pytest.mark.parametrize(("method", "path"), CURRENT_PROTECTED_ADMIN_REQUESTS)
+def test_protected_admin_routes_redirect_without_session(client, method, path):
+    response = client.request(method, path, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/login"
 
 
 def test_invalid_admin_session_does_not_authorize(client):
