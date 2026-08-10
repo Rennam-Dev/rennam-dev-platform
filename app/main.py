@@ -14,7 +14,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="rennam.dev",
         description="Portfólio técnico e mini-CMS autoral.",
-        version="0.2.0",
+        version="0.2.1",
         docs_url="/docs" if not settings.is_production else None,
         redoc_url=None,
         openapi_url="/openapi.json" if not settings.is_production else None,

@@ -1,5 +1,10 @@
 # rennam.dev — Projeto 0
 
+> **Versão atual:** v0.2.1
+> **Status:** fundação estabilizada e pronta para evolução funcional, mas
+> **não classificada como pronta para produção**. A validação reproduzível está
+> disponível por `make verify`.
+
 Portfólio técnico e mini-CMS autoral construído com FastAPI, Jinja2,
 PostgreSQL, SQLAlchemy e Alembic.
 
@@ -34,7 +39,7 @@ editor visual, múltiplos usuários e agendamento não fazem parte do MVP.
 ```text
 Visitante ──> rotas públicas ──> projetos publicados
                                      ↑
-Rennam ──> /admin ──> CRUD ──> PostgreSQL
+Rennam ──> /admin ──> gestão de projetos ──> PostgreSQL
 
 Projetos de IA continuam em repositórios próprios.
 O rennam.dev publica apenas seus estudos de caso e links.
@@ -54,6 +59,10 @@ app/
 ## Início rápido com Docker
 
 Requisitos: Docker e Docker Compose.
+
+Este Compose é exclusivamente para development local. O serviço web escuta
+somente em `127.0.0.1` e não deve ser exposto diretamente em rede não confiável
+nem reutilizado como topologia de staging/production.
 
 1. Crie as variáveis locais:
 
@@ -188,31 +197,27 @@ alembic upgrade head
   restrinja `FORWARDED_ALLOW_IPS` ao proxy controlado e publique o ambiente
   somente por HTTPS.
 
-## Próximas versões
+## Estado e roadmap
 
-### V1 — base entregue
+### Entregue na v0.2.1
 
-- CRUD completo de projetos;
-- publicação e destaque;
-- estudos de caso;
-- autenticação por sessão;
-- PostgreSQL e migrations.
+- gestão administrativa de projetos, sem alteração de slug ou hard delete;
+- publicação, destaque e estudos de caso públicos;
+- autenticação por sessão, CSRF, Argon2 e rate limiting do login;
+- auditoria sanitizada dos eventos de autenticação;
+- PostgreSQL, SQLAlchemy e ciclo Alembic validado em banco descartável;
+- configuração fail-closed para staging/production e baseline de segurança HTTP;
+- validação reproduzível com Ruff, pytest e Alembic por `make verify`.
 
-### V1.1
+### Planejado, ainda não implementado
 
-- preview de rascunho;
-- upload de capa para storage compatível com S3;
-- editor Markdown com toolbar;
-- campos Open Graph por projeto;
-- auditoria simples de login;
-- rate limit no painel.
+- v0.3: evolução modular orientada por casos reais;
+- v0.4: Blog CMS com estado editorial default-private, categorias e tags;
+- versões posteriores: workflow editorial, SEO avançado, internacionalização,
+  identidade e gateway controlado de Labs.
 
-### V2
-
-- CRUD do blog;
-- tags e categorias;
-- agendamento de publicação;
-- painel de mídia.
+O detalhamento e a ordem aprovados permanecem em
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Projeto 1 — Rennam Semantic Docs
 
@@ -242,7 +247,9 @@ estudo de caso e apontará para o código e a demonstração.
 
 ## Documentação fundacional
 
-Esta distribuição adiciona a fundação de produto e governança sem alterar as funcionalidades da aplicação v0.2.
+Esta distribuição corresponde à fundação v0.2.1 estabilizada. Ela está pronta
+para evolução incremental, mas os requisitos operacionais P2 ainda impedem
+classificá-la como pronta para produção.
 
 Comece por [START_HERE.md](START_HERE.md) e leia:
 
