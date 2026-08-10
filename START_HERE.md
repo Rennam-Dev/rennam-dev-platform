@@ -1,16 +1,18 @@
 # Comece por aqui
 
-Esta versão preserva o código da base v0.2 e adiciona a documentação fundacional do projeto.
+Esta versão corresponde à v0.3.0 — Fundação modular concluída. A próxima
+milestone é v0.4.0 — Blog CMS.
 
 ## Objetivo desta etapa
 
-Antes de desenvolver novas funcionalidades, o Codex deve:
+Antes de iniciar uma tarefa da v0.4, o Codex deve:
 
 1. ler `AGENTS.md`;
 2. ler `docs/PRODUCT_SCOPE.md`, `docs/ARCHITECTURE.md` e `docs/ROADMAP.md`;
-3. auditar a base atual sem alterar o código;
-4. registrar a auditoria em `docs/audits/TECHNICAL_AUDIT_V0.2.md`;
-5. aguardar aprovação antes de implementar.
+3. confirmar o estado do repositório com `git status`;
+4. executar ou consultar o resultado atual de `make verify`;
+5. implementar somente uma tarefa explicitamente aprovada, sem antecipar
+   funcionalidades futuras.
 
 ## Primeiro comando
 
@@ -18,22 +20,14 @@ Antes de desenvolver novas funcionalidades, o Codex deve:
 git status
 ```
 
-Caso a pasta ainda não seja um repositório Git:
+O gate reproduzível da base é:
 
 ```bash
-git init
-git add .
-git commit -m "chore: import rennam.dev foundation"
+make verify
 ```
 
-Depois crie a branch da auditoria:
+## Próxima milestone
 
-```bash
-git switch -c chore/technical-audit
-```
-
-## Primeira tarefa para o Codex
-
-Peça ao Codex:
-
-> Leia `AGENTS.md` e toda a documentação em `docs/`. Faça uma auditoria técnica somente leitura da base v0.2. Não altere arquivos da aplicação. Registre evidências, riscos, pontos reutilizáveis e um plano de estabilização em `docs/audits/TECHNICAL_AUDIT_V0.2.md`. Antes de escrever o relatório, apresente um plano curto da auditoria.
+A v0.4.0 adicionará o Blog CMS conforme `docs/ROADMAP.md`. O trabalho só deve
+começar mediante tarefa explícita e plano aprovado; Article, Category, Tag e o
+workflow editorial ainda não fazem parte da base concluída na v0.3.0.

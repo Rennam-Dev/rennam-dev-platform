@@ -2,7 +2,7 @@
 
 ## Ambiente oficial de validação
 
-A v0.2.1 usa Python 3.12 como versão oficial. O fluxo completo requer somente
+A v0.3.0 usa Python 3.12 como versão oficial. O fluxo completo requer somente
 Docker com Docker Compose e é executado por:
 
 ```bash

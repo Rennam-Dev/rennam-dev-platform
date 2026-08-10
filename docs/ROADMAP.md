@@ -1,17 +1,17 @@
 # Roadmap
 
-## v0.2.1 — Estabilização
+## v0.2.1 — Estabilização — Concluída
 
 - Auditar código, banco, migrations, autenticação, testes e Docker.
 - Corrigir falhas críticas sem ampliar escopo.
 - Garantir execução local reproduzível.
 
-## v0.3.0 — Fundação modular
+## v0.3.0 — Fundação modular — Concluída
 
 - Ajustar organização somente onde a auditoria comprovar necessidade.
 - Consolidar padrões de rotas, serviços e repositórios.
 
-## v0.4.0 — Blog CMS
+## v0.4.0 — Blog CMS — Próxima milestone
 
 - Artigos, categorias, tags, Markdown, rascunho, preview e publicação.
 - Separação editorial entre Blog e Engineering Journal.

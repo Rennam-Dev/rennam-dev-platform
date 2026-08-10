@@ -1,8 +1,8 @@
 # Brief para revisão arquitetural — rennam.dev
 
-> **Status:** documento fundacional atualizado para refletir a v0.2.1. A
-> exclusão definitiva permanece bloqueada e os recursos listados em “Fora do
-> escopo” continuam planejados, não implementados.
+> **Status:** documento fundacional vivo alinhado à v0.3.0. A Fundação modular
+> está concluída; a exclusão definitiva permanece bloqueada e os recursos
+> listados em “Fora do escopo” continuam planejados, não implementados.
 
 ## Decisão central
 

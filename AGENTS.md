@@ -6,9 +6,9 @@
 
 ## Fase atual
 
-Fundação v0.2.1 estabilizada, com remediações R1–R3 confirmadas e preparação
-para publicação do repositório. A base está pronta para evolução funcional,
-mas não está classificada como pronta para produção. A v0.3 ainda não começou.
+v0.3.0 concluída, com a Fundação modular estabelecida e as tarefas M3.1–M3.4
+validadas. A próxima milestone é v0.4.0 — Blog CMS. A readiness permanece B:
+pronta para evolução funcional, mas não classificada como pronta para produção.
 
 Não implemente funcionalidades futuras sem tarefa explícita e aprovação do plano.
 

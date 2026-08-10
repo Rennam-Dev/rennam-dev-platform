@@ -2,7 +2,8 @@
 
 ## Estado atual
 
-A base v0.2 possui modelos de projetos e tecnologias. A auditoria deve confirmar campos, constraints, índices e migrations existentes.
+A v0.3.0 mantém os modelos de projetos e tecnologias, sem migration nova na
+Fundação modular. Article, Category e Tag permanecem planejados para a v0.4.0.
 
 ## Entidades planejadas
 

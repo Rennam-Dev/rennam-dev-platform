@@ -1,9 +1,9 @@
 # rennam.dev — Projeto 0
 
-> **Versão atual:** v0.2.1
-> **Status:** fundação estabilizada e pronta para evolução funcional, mas
-> **não classificada como pronta para produção**. A validação reproduzível está
-> disponível por `make verify`.
+> **Versão atual:** v0.3.0
+> **Status:** Fundação modular concluída e pronta para iniciar a evolução
+> funcional da v0.4, mas **não classificada como pronta para produção**. A
+> validação reproduzível está disponível por `make verify`.
 
 Portfólio técnico e mini-CMS autoral construído com FastAPI, Jinja2,
 PostgreSQL, SQLAlchemy e Alembic.
@@ -126,7 +126,7 @@ Acesse:
 
 Python 3.12 é a versão oficial do projeto, registrada em `.python-version`, no
 Dockerfile da aplicação e na imagem de validação. Outras versões não fazem
-parte da matriz validada da v0.2.1.
+parte da matriz validada da v0.3.0.
 
 ```bash
 python -m venv .venv
@@ -209,10 +209,16 @@ alembic upgrade head
 - configuração fail-closed para staging/production e baseline de segurança HTTP;
 - validação reproduzível com Ruff, pytest e Alembic por `make verify`.
 
-### Planejado, ainda não implementado
+### Entregue na v0.3.0 — Fundação modular
 
-- v0.3: evolução modular orientada por casos reais;
-- v0.4: Blog CMS com estado editorial default-private, categorias e tags;
+- autorização preventiva de todas as rotas administrativas;
+- contrato centralizado de entrada dos formulários de projetos;
+- fronteira explícita entre services e repositories;
+- transações e conflitos de persistência centralizados no service.
+
+### Próxima milestone
+
+- v0.4.0: Blog CMS com estado editorial default-private, categorias e tags;
 - versões posteriores: workflow editorial, SEO avançado, internacionalização,
   identidade e gateway controlado de Labs.
 
@@ -247,9 +253,9 @@ estudo de caso e apontará para o código e a demonstração.
 
 ## Documentação fundacional
 
-Esta distribuição corresponde à fundação v0.2.1 estabilizada. Ela está pronta
-para evolução incremental, mas os requisitos operacionais P2 ainda impedem
-classificá-la como pronta para produção.
+Esta distribuição corresponde à v0.3.0 — Fundação modular concluída. Ela está
+pronta para iniciar a v0.4.0 — Blog CMS, mas os requisitos operacionais P2 ainda
+impedem classificá-la como pronta para produção.
 
 Comece por [START_HERE.md](START_HERE.md) e leia:
 
