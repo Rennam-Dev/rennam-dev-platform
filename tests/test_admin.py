@@ -102,6 +102,13 @@ PUBLIC_ADMIN_ROUTES = frozenset(
 CURRENT_PROTECTED_ADMIN_REQUESTS = (
     ("GET", "/admin"),
     ("POST", "/admin/logout"),
+    ("GET", "/admin/artigos"),
+    ("GET", "/admin/artigos/novo"),
+    ("POST", "/admin/artigos/novo"),
+    ("GET", "/admin/artigos/999/editar"),
+    ("POST", "/admin/artigos/999/editar"),
+    ("GET", "/admin/categorias"),
+    ("POST", "/admin/categorias/nova"),
     ("GET", "/admin/projetos/novo"),
     ("POST", "/admin/projetos/novo"),
     ("GET", "/admin/projetos/999/editar"),

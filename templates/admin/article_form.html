@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ page_title }} — rennam.admin{% endblock %}
+{% block content %}
+<div class="admin-title">
+  <div><a class="back-link" href="/admin/artigos">← artigos</a><h1>{{ page_title }}</h1></div>
+  <span class="badge">{{ article.status if article else "draft" }}</span>
+</div>
+
+{% if saved %}<div class="alert alert--success">Artigo salvo.</div>{% endif %}
+{% if errors %}
+<div class="alert alert--error"><strong>Revise os campos:</strong><ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<form class="project-form" action="{{ action }}" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <section class="form-section">
+    <div><span>01</span><h2>Identidade</h2><p>Seção, título e URL editorial.</p></div>
+    <div class="form-grid">
+      <label class="span-2">Título<input name="title" value="{{ values.title }}" maxlength="180" required></label>
+      <label>Slug<input name="slug" value="{{ values.slug }}" maxlength="120" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required></label>
+      <label>Seção<select name="section" required>
+        <option value="blog" {% if values.section == "blog" %}selected{% endif %}>Blog</option>
+        <option value="journal" {% if values.section == "journal" %}selected{% endif %}>Engineering Journal</option>
+      </select></label>
+      <label class="span-2">Resumo<textarea name="summary" rows="3" maxlength="320" required>{{ values.summary }}</textarea></label>
+      <label>Categoria<select name="category_id">
+        <option value="">Sem categoria</option>
+        {% for category in categories %}
+        <option value="{{ category.id }}" {% if values.category_id|string == category.id|string %}selected{% endif %}>{{ category.name }}</option>
+        {% endfor %}
+      </select></label>
+      <label>Tags <small>separadas por vírgula</small><input name="tags" value="{{ values.tags }}" placeholder="Python, FastAPI, PostgreSQL"></label>
+    </div>
+  </section>
+
+  <section class="form-section">
+    <div><span>02</span><h2>Conteúdo</h2><p>Markdown bruto. Preview será implementado em tarefa posterior.</p></div>
+    <div class="form-grid">
+      <label class="span-2">Markdown<textarea name="content_markdown" rows="18" required>{{ values.content_markdown }}</textarea></label>
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <button class="button button--primary" type="submit">Salvar artigo</button>
+    <a class="button" href="/admin/artigos">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block title %}Categorias — rennam.admin{% endblock %}
+{% block content %}
+<div class="admin-title">
+  <div><p class="eyebrow">// taxonomia</p><h1>Categorias</h1></div>
+  <a href="/admin/artigos">ver artigos →</a>
+</div>
+
+{% if saved %}<div class="alert alert--success">Categoria criada.</div>{% endif %}
+{% if errors %}
+<div class="alert alert--error"><strong>Revise o nome:</strong><ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<form class="form" action="/admin/categorias/nova" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Nome<input name="name" value="{{ values.name }}" maxlength="80" required></label>
+  <button class="button button--primary" type="submit">Criar categoria</button>
+</form>
+
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Categoria</th><th>Slug</th></tr></thead>
+    <tbody>
+    {% for category in categories %}
+      <tr><td><strong>{{ category.name }}</strong></td><td>{{ category.slug }}</td></tr>
+    {% else %}
+      <tr><td colspan="2">Nenhuma categoria cadastrada.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

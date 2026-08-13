@@ -4,6 +4,22 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import Article, Category, Tag
 
 
+def list_all(db: Session) -> list[Article]:
+    statement = (
+        select(Article)
+        .options(
+            selectinload(Article.category),
+            selectinload(Article.tags),
+        )
+        .order_by(Article.updated_at.desc(), Article.id.desc())
+    )
+    return list(db.scalars(statement))
+
+
+def list_categories(db: Session) -> list[Category]:
+    return list(db.scalars(select(Category).order_by(Category.name, Category.id)))
+
+
 def get_by_id(db: Session, article_id: int) -> Article | None:
     statement = (
         select(Article)

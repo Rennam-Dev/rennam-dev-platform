@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block title %}Artigos — rennam.admin{% endblock %}
+{% block content %}
+<div class="admin-title">
+  <div><p class="eyebrow">// conteúdo</p><h1>Artigos</h1></div>
+  <a class="button button--primary" href="/admin/artigos/novo">Novo artigo +</a>
+</div>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Artigo</th><th>Seção</th><th>Status</th><th>Categoria</th><th>Atualizado</th><th></th></tr></thead>
+    <tbody>
+    {% for article in articles %}
+      <tr>
+        <td><strong>{{ article.title }}</strong><small>{{ article.slug }}</small></td>
+        <td>{{ article.section }}</td>
+        <td><span class="badge">{{ article.status }}</span></td>
+        <td>{{ article.category.name if article.category else "—" }}</td>
+        <td>{{ article.updated_at.strftime("%d/%m/%Y") }}</td>
+        <td><a href="/admin/artigos/{{ article.id }}/editar">editar →</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">Nenhum artigo cadastrado.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

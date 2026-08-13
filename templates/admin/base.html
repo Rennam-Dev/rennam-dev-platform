@@ -12,6 +12,11 @@
     <div class="container admin-header__inner">
       <a class="brand" href="/admin">rennam<span>.admin</span></a>
       <div class="admin-header__actions">
+        {% if request.session.get("admin") %}
+        <a href="/admin">projetos</a>
+        <a href="/admin/artigos">artigos</a>
+        <a href="/admin/categorias">categorias</a>
+        {% endif %}
         <a href="/" target="_blank">ver site ↗</a>
         {% if request.session.get("admin") %}
         <form action="/admin/logout" method="post">
