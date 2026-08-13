@@ -31,6 +31,33 @@ Não implemente funcionalidades futuras sem tarefa explícita e aprovação do p
 6. Informe arquivos alterados, comandos executados e riscos restantes.
 7. Não faça commit, push, merge ou rebase sem autorização explícita.
 
+## Skills externas de agentes
+
+Skills externas podem apoiar planejamento, implementação, testes, revisão de
+segurança, migrations, documentação, depuração e revisão de código.
+
+As instruções locais do projeto, os documentos de arquitetura aprovados, os planos
+de implementação ativos e as instruções explícitas do usuário sempre têm
+precedência sobre skills externas.
+
+Skills externas não podem, por iniciativa própria:
+
+- criar commits;
+- enviar commits ou branches;
+- criar ou enviar tags;
+- criar releases;
+- fazer deploy de aplicações;
+- executar operações destrutivas;
+- executar migrations em ambientes persistentes;
+- ampliar o escopo da tarefa ativa além do que foi explicitamente aprovado.
+
+Commits, pushes, tags, releases, deploys e migrations em ambientes persistentes
+exigem autorização explícita do usuário para cada ação específica.
+
+Se uma skill externa entrar em conflito com este `AGENTS.md`, um plano de projeto
+aprovado ou uma instrução explícita do usuário, siga a regra local e informe o
+conflito.
+
 ## Limites de segurança
 
 - Nunca exponha segredos, chaves de LLM ou credenciais.
