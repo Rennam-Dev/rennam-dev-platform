@@ -88,6 +88,8 @@ def article_form_response(
     errors: list[str],
     article: Article | None = None,
     saved: bool = False,
+    published: bool = False,
+    unpublished: bool = False,
     status_code: int = 200,
 ) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -102,6 +104,8 @@ def article_form_response(
             categories=article_repository.list_categories(db),
             article=article,
             saved=saved,
+            published=published,
+            unpublished=unpublished,
         ),
         status_code=status_code,
     )
@@ -167,6 +171,8 @@ def edit_article_page(
     article_id: int,
     db: DBSession,
     saved: int = 0,
+    published: int = 0,
+    unpublished: int = 0,
 ):
     article = article_repository.get_by_id(db, article_id)
     if article is None:
@@ -180,6 +186,8 @@ def edit_article_page(
         errors=[],
         article=article,
         saved=bool(saved),
+        published=bool(published),
+        unpublished=bool(unpublished),
     )
 
 
@@ -207,6 +215,7 @@ async def update_article(
             article_service.ArticleCategoryError,
             article_service.ArticleConflictError,
             article_service.ArticleTagError,
+            article_service.ArticlePublicationError,
             article_service.ArticleUrlImmutableError,
         ) as error:
             errors.append(str(error))
@@ -219,6 +228,85 @@ async def update_article(
         errors=errors,
         article=article,
         status_code=422,
+    )
+
+
+@router.get("/artigos/{article_id}/preview", response_class=HTMLResponse)
+def preview_article(
+    request: Request,
+    _admin: AdminAccess,
+    article_id: int,
+    db: DBSession,
+):
+    article = article_repository.get_by_id(db, article_id)
+    if article is None:
+        raise article_not_found()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/article_preview.html",
+        context=admin_context(request, article=article),
+    )
+
+
+@router.post("/artigos/{article_id}/publicar", response_class=HTMLResponse)
+async def publish_article(
+    request: Request,
+    _admin: AdminAccess,
+    article_id: int,
+    db: DBSession,
+):
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    article = article_repository.get_by_id(db, article_id)
+    if article is None:
+        raise article_not_found()
+    try:
+        article_service.publish_article(db, article)
+    except article_service.ArticlePublicationError as error:
+        return article_form_response(
+            request,
+            db,
+            page_title=f"Editar: {article.title}",
+            action=f"/admin/artigos/{article.id}/editar",
+            values=article_form_values(article),
+            errors=[str(error)],
+            article=article,
+            status_code=422,
+        )
+    return RedirectResponse(
+        f"/admin/artigos/{article.id}/editar?published=1",
+        status_code=303,
+    )
+
+
+@router.post("/artigos/{article_id}/despublicar", response_class=HTMLResponse)
+async def unpublish_article(
+    request: Request,
+    _admin: AdminAccess,
+    article_id: int,
+    db: DBSession,
+):
+    data = await request.form()
+    validate_csrf(request, str(data.get("csrf_token", "")))
+    article = article_repository.get_by_id(db, article_id)
+    if article is None:
+        raise article_not_found()
+    try:
+        article_service.unpublish_article(db, article)
+    except article_service.ArticlePublicationError as error:
+        return article_form_response(
+            request,
+            db,
+            page_title=f"Editar: {article.title}",
+            action=f"/admin/artigos/{article.id}/editar",
+            values=article_form_values(article),
+            errors=[str(error)],
+            article=article,
+            status_code=422,
+        )
+    return RedirectResponse(
+        f"/admin/artigos/{article.id}/editar?unpublished=1",
+        status_code=303,
     )
 
 

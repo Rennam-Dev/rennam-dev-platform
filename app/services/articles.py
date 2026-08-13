@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,6 +23,10 @@ class ArticleCategoryError(ValueError):
 
 
 class ArticleTagError(ValueError):
+    pass
+
+
+class ArticlePublicationError(ValueError):
     pass
 
 
@@ -134,6 +139,65 @@ def _validate_url_stability(article: Article, form: ArticleForm) -> None:
         )
 
 
+def _validate_publication_preconditions(article: Article) -> None:
+    if article.category_id is None or article.category is None:
+        raise ArticlePublicationError(
+            "category_id: selecione uma categoria antes de publicar."
+        )
+    required_fields = (
+        ("title", article.title),
+        ("summary", article.summary),
+        ("content_markdown", article.content_markdown),
+    )
+    for field, value in required_fields:
+        if not value or not value.strip():
+            raise ArticlePublicationError(
+                f"{field}: campo obrigatório para publicação."
+            )
+
+
+def publish_article(db: Session, article: Article) -> Article:
+    """Publish idempotently while preserving the first publication instant."""
+    try:
+        _validate_publication_preconditions(article)
+        if article.published_at is None:
+            article.published_at = datetime.now(UTC)
+        article.status = "published"
+        article_repository.flush(db)
+        db.commit()
+        return article
+    except ArticlePublicationError:
+        if db.in_transaction():
+            db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise ArticlePublicationError(
+            "Não foi possível publicar devido a um conflito de persistência."
+        ) from None
+    except Exception:
+        db.rollback()
+        raise
+
+
+def unpublish_article(db: Session, article: Article) -> Article:
+    """Unpublish idempotently without clearing publication history."""
+    try:
+        article.status = "draft"
+        article_repository.flush(db)
+        db.commit()
+        return article
+    except IntegrityError:
+        db.rollback()
+        raise ArticlePublicationError(
+            "Não foi possível retirar a publicação devido a um conflito "
+            "de persistência."
+        ) from None
+    except Exception:
+        db.rollback()
+        raise
+
+
 def create_article(db: Session, form: ArticleForm) -> Article:
     tags_data = prepare_tags(form.tags)
     try:
@@ -170,6 +234,10 @@ def update_article(db: Session, article: Article, form: ArticleForm) -> Article:
     tags_data = prepare_tags(form.tags)
     try:
         category = _get_category(db, form.category_id)
+        if article.status == "published" and category is None:
+            raise ArticlePublicationError(
+                "category_id: um artigo publicado deve manter uma categoria."
+            )
         _ensure_available_url(
             db,
             form.section,

@@ -7,6 +7,8 @@
 </div>
 
 {% if saved %}<div class="alert alert--success">Artigo salvo.</div>{% endif %}
+{% if published %}<div class="alert alert--success">Artigo publicado.</div>{% endif %}
+{% if unpublished %}<div class="alert alert--success">Publicação retirada.</div>{% endif %}
 {% if errors %}
 <div class="alert alert--error"><strong>Revise os campos:</strong><ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>
 {% endif %}
@@ -35,7 +37,7 @@
   </section>
 
   <section class="form-section">
-    <div><span>02</span><h2>Conteúdo</h2><p>Markdown bruto. Preview será implementado em tarefa posterior.</p></div>
+    <div><span>02</span><h2>Conteúdo</h2><p>Markdown bruto, apresentado de forma segura no preview.</p></div>
     <div class="form-grid">
       <label class="span-2">Markdown<textarea name="content_markdown" rows="18" required>{{ values.content_markdown }}</textarea></label>
     </div>
@@ -46,4 +48,21 @@
     <a class="button" href="/admin/artigos">Cancelar</a>
   </div>
 </form>
+
+{% if article %}
+<div class="form-actions" aria-label="Ações editoriais">
+  <a class="button" href="/admin/artigos/{{ article.id }}/preview">Preview</a>
+  {% if article.status == "draft" %}
+  <form action="/admin/artigos/{{ article.id }}/publicar" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="button button--primary" type="submit">Publicar</button>
+  </form>
+  {% elif article.status == "published" %}
+  <form action="/admin/artigos/{{ article.id }}/despublicar" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="button" type="submit">Retirar publicação</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

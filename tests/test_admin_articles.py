@@ -78,6 +78,16 @@ def create_category(client, name: str = "Engineering") -> int:
         return category.id
 
 
+def create_publishable_article(client, **overrides: object) -> tuple[int, int]:
+    category_id = create_category(client)
+    article_id = create_article(
+        client,
+        category_id=str(category_id),
+        **overrides,
+    )
+    return article_id, category_id
+
+
 def test_authenticated_article_and_category_pages_render(client) -> None:
     login(client)
 
@@ -155,6 +165,216 @@ def test_admin_can_edit_article_and_redisplay_current_tags(client) -> None:
         assert article.status == "draft"
         assert article.published_at is None
         assert {tag.slug for tag in article.tags} == {"python", "postgresql"}
+
+
+def test_private_preview_renders_metadata_markdown_and_neutralizes_xss(
+    client,
+) -> None:
+    login(client)
+    malicious_markdown = """## Safe heading
+
+Markdown **seguro**.
+
+<script>alert(1)</script>
+
+[unsafe](javascript:alert(2))
+
+<a href="https://example.com" onclick="alert(3)">safe link</a>
+
+<img src="x" onerror="alert(4)">
+"""
+    article_id, _category_id = create_publishable_article(
+        client,
+        content_markdown=malicious_markdown,
+    )
+
+    preview = client.get(f"/admin/artigos/{article_id}/preview")
+
+    assert preview.status_code == 200
+    assert preview.headers["cache-control"] == "no-store"
+    assert '<meta name="robots" content="noindex,nofollow">' in preview.text
+    assert "Admin Article" in preview.text
+    assert "Article created through the protected admin authorship flow." in (
+        preview.text
+    )
+    assert "Engineering" in preview.text
+    assert "Python" in preview.text
+    assert "FastAPI" in preview.text
+    assert "blog · draft" in preview.text
+    assert "<h2>Safe heading</h2>" in preview.text
+    assert "<strong>seguro</strong>" in preview.text
+    rendered = preview.text.lower()
+    assert "<script" not in rendered
+    assert 'href="javascript:' not in rendered
+    assert "onclick=" not in rendered
+    assert "<img" not in rendered
+
+
+def test_preview_works_for_published_article_and_missing_id_is_controlled(
+    client,
+) -> None:
+    login(client)
+    article_id, _category_id = create_publishable_article(client)
+    edit_page = client.get(f"/admin/artigos/{article_id}/editar")
+    publication = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(edit_page)},
+        follow_redirects=False,
+    )
+
+    preview = client.get(f"/admin/artigos/{article_id}/preview")
+    missing = client.get("/admin/artigos/999999/preview")
+
+    assert publication.status_code == 303
+    assert preview.status_code == 200
+    assert "blog · published" in preview.text
+    assert preview.headers["cache-control"] == "no-store"
+    assert missing.status_code == 404
+    assert "Artigo não encontrado" in missing.text
+    assert "sqlalchemy" not in missing.text.lower()
+
+
+def test_admin_publishes_valid_draft_with_separate_editorial_action(
+    client,
+) -> None:
+    login(client)
+    article_id, _category_id = create_publishable_article(client)
+    edit_page = client.get(f"/admin/artigos/{article_id}/editar")
+
+    assert f'href="/admin/artigos/{article_id}/preview"' in edit_page.text
+    assert f'action="/admin/artigos/{article_id}/publicar"' in edit_page.text
+    assert f'action="/admin/artigos/{article_id}/despublicar"' not in edit_page.text
+    assert 'name="status"' not in edit_page.text
+    assert 'name="published_at"' not in edit_page.text
+
+    response = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(edit_page)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == (
+        f"/admin/artigos/{article_id}/editar?published=1"
+    )
+    with SessionLocal() as db:
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        assert article.status == "published"
+        assert article.published_at is not None
+        assert article.published_at.tzinfo is not None
+
+    published_page = client.get(response.headers["location"])
+    assert "Artigo publicado." in published_page.text
+    assert (
+        f'action="/admin/artigos/{article_id}/despublicar"'
+        in published_page.text
+    )
+    assert f'action="/admin/artigos/{article_id}/publicar"' not in (
+        published_page.text
+    )
+
+
+def test_publication_precondition_error_returns_422_without_mutation(
+    client,
+) -> None:
+    login(client)
+    article_id = create_article(client)
+    edit_page = client.get(f"/admin/artigos/{article_id}/editar")
+
+    response = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(edit_page)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert "selecione uma categoria antes de publicar" in response.text
+    assert "sqlalchemy" not in response.text.lower()
+    with SessionLocal() as db:
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        assert article.status == "draft"
+        assert article.published_at is None
+
+
+def test_unpublish_and_republish_preserve_original_timestamp(client) -> None:
+    login(client)
+    article_id, _category_id = create_publishable_article(client)
+    edit_page = client.get(f"/admin/artigos/{article_id}/editar")
+    first_publish = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(edit_page)},
+        follow_redirects=False,
+    )
+    assert first_publish.status_code == 303
+    with SessionLocal() as db:
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        first_publication = article.published_at
+        assert first_publication is not None
+
+    published_page = client.get(first_publish.headers["location"])
+    unpublish = client.post(
+        f"/admin/artigos/{article_id}/despublicar",
+        data={"csrf_token": csrf_from(published_page)},
+        follow_redirects=False,
+    )
+
+    assert unpublish.status_code == 303
+    assert unpublish.headers["location"] == (
+        f"/admin/artigos/{article_id}/editar?unpublished=1"
+    )
+    with SessionLocal() as db:
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        assert article.status == "draft"
+        assert article.published_at == first_publication
+
+    draft_page = client.get(unpublish.headers["location"])
+    assert "Publicação retirada." in draft_page.text
+    republish = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(draft_page)},
+        follow_redirects=False,
+    )
+
+    assert republish.status_code == 303
+    with SessionLocal() as db:
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        assert article.status == "published"
+        assert article.published_at == first_publication
+
+
+def test_published_article_edit_cannot_remove_required_category(client) -> None:
+    login(client)
+    article_id, category_id = create_publishable_article(client)
+    edit_page = client.get(f"/admin/artigos/{article_id}/editar")
+    publication = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(edit_page)},
+        follow_redirects=False,
+    )
+    assert publication.status_code == 303
+    published_page = client.get(publication.headers["location"])
+
+    response = client.post(
+        f"/admin/artigos/{article_id}/editar",
+        data=article_data(
+            csrf_from(published_page),
+            category_id="",
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert "artigo publicado deve manter uma categoria" in response.text
+    with SessionLocal() as db:
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        assert article.status == "published"
+        assert article.category_id == category_id
 
 
 @pytest.mark.parametrize("method", ["get", "post"])
@@ -301,6 +521,42 @@ def test_invalid_csrf_stops_edit_repository_and_service(
     response = client.post(
         "/admin/artigos/999/editar",
         data=article_data("invalid-csrf"),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("action", "service_name"),
+    [
+        ("publicar", "publish_article"),
+        ("despublicar", "unpublish_article"),
+    ],
+)
+@pytest.mark.parametrize("csrf_token", ["", "invalid-csrf"])
+def test_invalid_csrf_stops_publication_repository_and_service(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+    service_name: str,
+    csrf_token: str,
+) -> None:
+    login(client)
+    monkeypatch.setattr(
+        admin_article_routes.article_repository,
+        "get_by_id",
+        lambda *_args, **_kwargs: pytest.fail("repository must not run before CSRF"),
+    )
+    monkeypatch.setattr(
+        admin_article_routes.article_service,
+        service_name,
+        lambda *_args, **_kwargs: pytest.fail("service must not run before CSRF"),
+    )
+
+    response = client.post(
+        f"/admin/artigos/999/{action}",
+        data={"csrf_token": csrf_token},
         follow_redirects=False,
     )
 
@@ -457,6 +713,7 @@ def test_each_admin_authorship_post_reads_form_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     login(client)
+    category_id = create_category(client, "Publication Actions")
     calls: dict[str, int] = {}
     original_form = Request.form
 
@@ -469,7 +726,10 @@ def test_each_admin_authorship_post_reads_form_once(
     new_page = client.get("/admin/artigos/novo")
     article_response = client.post(
         "/admin/artigos/novo",
-        data=article_data(csrf_from(new_page)),
+        data=article_data(
+            csrf_from(new_page),
+            category_id=str(category_id),
+        ),
         follow_redirects=False,
     )
     assert article_response.status_code == 303
@@ -478,10 +738,30 @@ def test_each_admin_authorship_post_reads_form_once(
     edit_page = client.get(f"/admin/artigos/{article_id}/editar")
     edit_response = client.post(
         f"/admin/artigos/{article_id}/editar",
-        data=article_data(csrf_from(edit_page), title="Read Once"),
+        data=article_data(
+            csrf_from(edit_page),
+            title="Read Once",
+            category_id=str(category_id),
+        ),
         follow_redirects=False,
     )
     assert edit_response.status_code == 303
+
+    publication_page = client.get(edit_response.headers["location"])
+    publish_response = client.post(
+        f"/admin/artigos/{article_id}/publicar",
+        data={"csrf_token": csrf_from(publication_page)},
+        follow_redirects=False,
+    )
+    assert publish_response.status_code == 303
+
+    published_page = client.get(publish_response.headers["location"])
+    unpublish_response = client.post(
+        f"/admin/artigos/{article_id}/despublicar",
+        data={"csrf_token": csrf_from(published_page)},
+        follow_redirects=False,
+    )
+    assert unpublish_response.status_code == 303
 
     categories_page = client.get("/admin/categorias")
     category_response = client.post(
@@ -494,6 +774,8 @@ def test_each_admin_authorship_post_reads_form_once(
     assert calls == {
         "/admin/artigos/novo": 1,
         f"/admin/artigos/{article_id}/editar": 1,
+        f"/admin/artigos/{article_id}/publicar": 1,
+        f"/admin/artigos/{article_id}/despublicar": 1,
         "/admin/categorias/nova": 1,
     }
 
@@ -531,15 +813,14 @@ def test_service_error_redisplay_uses_controlled_values(
     assert 'name="tags" value="Conflicting, Tags"' in response.text
 
 
-def test_no_article_publication_or_preview_routes_exist(client) -> None:
+def test_m44_does_not_expose_sql_articles_or_preview_publicly(client) -> None:
     login(client)
     article_id = create_article(client)
-    page = client.get("/admin/artigos")
-    csrf_token = csrf_from(page)
+    sitemap = client.get("/sitemap.xml")
 
-    assert client.get(f"/admin/artigos/{article_id}/preview").status_code == 404
-    assert client.post(
-        f"/admin/artigos/{article_id}/publicar",
-        data={"csrf_token": csrf_token},
-    ).status_code == 404
+    assert sitemap.status_code == 200
+    assert f"/admin/artigos/{article_id}/preview" not in sitemap.text
+    assert "/admin/" not in sitemap.text
+    assert client.get("/blog").status_code == 200
+    assert client.get("/blog/admin-article").status_code == 404
     assert client.get("/journal").status_code == 404

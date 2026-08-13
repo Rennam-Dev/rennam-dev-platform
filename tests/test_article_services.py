@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.models import Tag
+from app.models import Article, Tag
 from app.repositories import articles as article_repository
 from app.schemas.article import ArticleForm, CategoryForm
 from app.services import articles as article_service
@@ -45,6 +45,291 @@ def track_transactions(db: Session) -> Counter[str]:
 
 def fail_if_called(*_args: object, **_kwargs: object) -> None:
     raise AssertionError("repository write should not be called")
+
+
+def create_publishable_article(db: Session) -> Article:
+    category = article_service.create_category(
+        db,
+        CategoryForm(name="Publication"),
+    )
+    return article_service.create_article(
+        db,
+        make_article_form(category_id=category.id),
+    )
+
+
+def test_publish_article_sets_aware_utc_timestamp_and_commits_once() -> None:
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        transactions = track_transactions(db)
+        before = datetime.now(UTC)
+
+        published = article_service.publish_article(db, article)
+
+        after = datetime.now(UTC)
+        assert published.status == "published"
+        assert published.published_at is not None
+        assert published.published_at.tzinfo is not None
+        assert published.published_at.utcoffset() == UTC.utcoffset(before)
+        assert before <= published.published_at <= after
+        assert transactions["commit"] == 1
+        assert transactions["rollback"] == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("category", "selecione uma categoria"),
+        ("title", "title: campo obrigatório"),
+        ("summary", "summary: campo obrigatório"),
+        ("content_markdown", "content_markdown: campo obrigatório"),
+    ],
+)
+def test_publication_preconditions_fail_before_write_without_partial_state(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    message: str,
+) -> None:
+    with SessionLocal() as db:
+        created = create_publishable_article(db)
+        article_id = created.id
+        article = article_repository.get_by_id(db, article_id)
+        assert article is not None
+        transactions = track_transactions(db)
+        if field == "category":
+            article.category = None
+            article.category_id = None
+        else:
+            setattr(article, field, "   ")
+        monkeypatch.setattr(article_repository, "flush", fail_if_called)
+
+        with pytest.raises(article_service.ArticlePublicationError) as error:
+            article_service.publish_article(db, article)
+
+        assert message in str(error.value)
+        assert article.status == "draft"
+        assert article.published_at is None
+        assert transactions["commit"] == 0
+        assert transactions["rollback"] == 1
+
+    with SessionLocal() as db:
+        persisted = article_repository.get_by_id(db, article_id)
+        assert persisted is not None
+        assert persisted.status == "draft"
+        assert persisted.published_at is None
+
+
+def test_repeated_publish_is_idempotent_and_preserves_timestamp() -> None:
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_service.publish_article(db, article)
+        first_publication = article.published_at
+        transactions = track_transactions(db)
+
+        repeated = article_service.publish_article(db, article)
+
+        assert repeated.status == "published"
+        assert repeated.published_at == first_publication
+        assert transactions["commit"] == 1
+        assert transactions["rollback"] == 0
+
+
+def test_unpublish_and_republish_preserve_first_publication_timestamp() -> None:
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_service.publish_article(db, article)
+        first_publication = article.published_at
+        transactions = track_transactions(db)
+
+        unpublished = article_service.unpublish_article(db, article)
+
+        assert unpublished.status == "draft"
+        assert unpublished.published_at == first_publication
+        assert transactions["commit"] == 1
+        assert transactions["rollback"] == 0
+
+        transactions.clear()
+        republished = article_service.publish_article(db, article)
+
+        assert republished.status == "published"
+        assert republished.published_at == first_publication
+        assert transactions["commit"] == 1
+        assert transactions["rollback"] == 0
+
+
+def test_repeated_unpublish_is_idempotent_and_preserves_history() -> None:
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_service.publish_article(db, article)
+        article_service.unpublish_article(db, article)
+        first_publication = article.published_at
+        transactions = track_transactions(db)
+
+        repeated = article_service.unpublish_article(db, article)
+
+        assert repeated.status == "draft"
+        assert repeated.published_at == first_publication
+        assert transactions["commit"] == 1
+        assert transactions["rollback"] == 0
+
+
+def test_publication_integrity_error_rolls_back_as_controlled_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_flush = article_repository.flush
+
+    def fail_after_flush(db: Session) -> None:
+        original_flush(db)
+        raise IntegrityError(
+            "private statement",
+            {},
+            RuntimeError("private database detail"),
+        )
+
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_id = article.id
+        transactions = track_transactions(db)
+        monkeypatch.setattr(article_repository, "flush", fail_after_flush)
+
+        with pytest.raises(article_service.ArticlePublicationError) as error:
+            article_service.publish_article(db, article)
+
+        assert str(error.value) == (
+            "Não foi possível publicar devido a um conflito de persistência."
+        )
+        assert "private database detail" not in str(error.value)
+        assert error.value.__cause__ is None
+        assert article.status == "draft"
+        assert article.published_at is None
+        assert transactions["commit"] == 0
+        assert transactions["rollback"] == 1
+
+    with SessionLocal() as db:
+        persisted = article_repository.get_by_id(db, article_id)
+        assert persisted is not None
+        assert persisted.status == "draft"
+        assert persisted.published_at is None
+
+
+def test_unpublish_integrity_error_rolls_back_without_losing_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_flush = article_repository.flush
+
+    def fail_after_flush(db: Session) -> None:
+        original_flush(db)
+        raise IntegrityError(
+            "private statement",
+            {},
+            RuntimeError("private database detail"),
+        )
+
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_service.publish_article(db, article)
+        article_id = article.id
+        first_publication = article.published_at
+        transactions = track_transactions(db)
+        monkeypatch.setattr(article_repository, "flush", fail_after_flush)
+
+        with pytest.raises(article_service.ArticlePublicationError) as error:
+            article_service.unpublish_article(db, article)
+
+        assert "conflito de persistência" in str(error.value)
+        assert "private database detail" not in str(error.value)
+        assert article.status == "published"
+        assert article.published_at == first_publication
+        assert transactions["commit"] == 0
+        assert transactions["rollback"] == 1
+
+    with SessionLocal() as db:
+        persisted = article_repository.get_by_id(db, article_id)
+        assert persisted is not None
+        assert persisted.status == "published"
+        assert persisted.published_at == first_publication
+
+
+def test_unexpected_publication_error_rolls_back_and_is_reraised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure = RuntimeError("unexpected publication failure")
+    original_flush = article_repository.flush
+
+    def fail_after_flush(db: Session) -> None:
+        original_flush(db)
+        raise failure
+
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        transactions = track_transactions(db)
+        monkeypatch.setattr(article_repository, "flush", fail_after_flush)
+
+        with pytest.raises(RuntimeError) as error:
+            article_service.publish_article(db, article)
+
+        assert error.value is failure
+        assert article.status == "draft"
+        assert article.published_at is None
+        assert transactions["commit"] == 0
+        assert transactions["rollback"] == 1
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"slug": "changed-after-unpublish"},
+        {"section": "journal"},
+    ],
+)
+def test_unpublished_article_keeps_slug_and_section_frozen(
+    overrides: dict[str, object],
+) -> None:
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_service.publish_article(db, article)
+        article_service.unpublish_article(db, article)
+        transactions = track_transactions(db)
+
+        with pytest.raises(article_service.ArticleUrlImmutableError):
+            article_service.update_article(
+                db,
+                article,
+                make_article_form(
+                    category_id=article.category_id,
+                    **overrides,
+                ),
+            )
+
+        assert article.slug == "service-article"
+        assert article.section == "blog"
+        assert article.status == "draft"
+        assert article.published_at is not None
+        assert transactions["commit"] == 0
+        assert transactions["rollback"] == 0
+
+
+def test_editing_published_article_cannot_remove_required_category() -> None:
+    with SessionLocal() as db:
+        article = create_publishable_article(db)
+        article_service.publish_article(db, article)
+        article = article_repository.get_by_id(db, article.id)
+        assert article is not None
+        category_id = article.category_id
+        transactions = track_transactions(db)
+
+        with pytest.raises(article_service.ArticlePublicationError) as error:
+            article_service.update_article(
+                db,
+                article,
+                make_article_form(category_id=None),
+            )
+
+        assert "deve manter uma categoria" in str(error.value)
+        assert article.status == "published"
+        assert article.category_id == category_id
+        assert transactions["commit"] == 0
+        assert transactions["rollback"] == 1
 
 
 def test_create_article_is_draft_and_commits_exactly_once() -> None:

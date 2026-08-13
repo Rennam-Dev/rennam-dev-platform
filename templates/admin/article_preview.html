@@ -1,0 +1,24 @@
+{% extends "admin/base.html" %}
+{% block title %}Preview: {{ article.title }} — rennam.admin{% endblock %}
+{% block content %}
+<div class="admin-title">
+  <div>
+    <a class="back-link" href="/admin/artigos/{{ article.id }}/editar">← voltar à edição</a>
+    <h1>Preview privado</h1>
+  </div>
+  <span class="badge">{{ article.section }} · {{ article.status }}</span>
+</div>
+
+<article class="article">
+  <header class="page-header">
+    <p class="eyebrow">// {{ article.section }} · {{ article.status }}</p>
+    <h1>{{ article.title }}</h1>
+    <p>{{ article.summary }}</p>
+    <div class="chips">
+      <span>Categoria: {{ article.category.name if article.category else "sem categoria" }}</span>
+      {% for tag in article.tags %}<span>{{ tag.name }}</span>{% endfor %}
+    </div>
+  </header>
+  <div class="prose article__body">{{ article.content_markdown | markdown }}</div>
+</article>
+{% endblock %}
