@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, raiseload, selectinload
 
 from app.models import Article, Category, Tag
 
@@ -58,6 +58,38 @@ def list_published_by_section(db: Session, section: str) -> list[Article]:
         .order_by(Article.published_at.desc(), Article.id.desc())
     )
     return list(db.scalars(statement))
+
+
+def list_recent_published_blog(db: Session, limit: int) -> list[Article]:
+    statement = (
+        select(Article)
+        .where(
+            Article.section == "blog",
+            Article.status == "published",
+        )
+        .options(
+            load_only(
+                Article.id,
+                Article.slug,
+                Article.title,
+                Article.published_at,
+            ),
+            raiseload(Article.category),
+            raiseload(Article.tags),
+        )
+        .order_by(Article.published_at.desc(), Article.id.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(statement))
+
+
+def list_published_section_slugs(db: Session) -> list[tuple[str, str]]:
+    statement = (
+        select(Article.section, Article.slug)
+        .where(Article.status == "published")
+        .order_by(Article.section, Article.slug)
+    )
+    return [(section, slug) for section, slug in db.execute(statement)]
 
 
 def get_published_by_slug(

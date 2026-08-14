@@ -46,17 +46,17 @@
   </p>
 </section>
 
-{% if posts %}
+{% if articles %}
 <section class="section">
   <div class="section-heading">
     <h2>// notas recentes</h2>
     <a href="/blog">arquivo →</a>
   </div>
   <div class="post-list">
-    {% for post in posts %}
-      <a class="post-row" href="/blog/{{ post.slug }}">
-        <span>{{ post.date }}</span>
-        <strong>{{ post.title }}</strong>
+    {% for article in articles %}
+      <a class="post-row" href="/blog/{{ article.slug }}">
+        <span>{{ article.published_at.strftime("%Y-%m-%d") }}</span>
+        <strong>{{ article.title }}</strong>
         <i>→</i>
       </a>
     {% endfor %}

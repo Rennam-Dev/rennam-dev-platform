@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.repositories import articles as article_repository
 from app.repositories import projects as project_repository
-from app.web import load_posts, public_context, templates
+from app.web import public_context, templates
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -29,7 +30,7 @@ def home(request: Request, db: DBSession):
             request,
             "home",
             featured_projects=project_repository.list_featured(db),
-            posts=load_posts()[:2],
+            articles=article_repository.list_recent_published_blog(db, limit=2),
             status_labels=STATUS_LABELS,
         ),
     )
@@ -108,14 +109,24 @@ def robots():
 
 @router.get("/sitemap.xml")
 def sitemap(db: DBSession):
-    static_paths = ["", "/sobre", "/projetos", "/blog", "/contato"]
+    static_paths = [
+        "",
+        "/sobre",
+        "/projetos",
+        "/blog",
+        "/journal",
+        "/contato",
+    ]
     project_paths = [
         f"/projetos/{project.slug}" for project in project_repository.list_published(db)
     ]
-    post_paths = [f"/blog/{post['slug']}" for post in load_posts()]
+    article_paths = [
+        f"/{section}/{slug}"
+        for section, slug in article_repository.list_published_section_slugs(db)
+    ]
     urls = "".join(
         f"<url><loc>{settings.site_url}{path}</loc></url>"
-        for path in static_paths + project_paths + post_paths
+        for path in static_paths + project_paths + article_paths
     )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>'

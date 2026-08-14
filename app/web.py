@@ -1,5 +1,4 @@
 import bleach
-import frontmatter
 import markdown
 from markupsafe import Markup
 from starlette.templating import Jinja2Templates
@@ -54,21 +53,3 @@ def public_context(request, active: str, **extra) -> dict:
         "settings": settings,
         **extra,
     }
-
-
-def load_posts() -> list[dict]:
-    posts = []
-    blog_dir = BASE_DIR / "content" / "blog"
-    for path in blog_dir.glob("*.md"):
-        document = frontmatter.load(path)
-        posts.append(
-            {
-                "slug": path.stem,
-                "title": document.get("titulo", path.stem),
-                "date": document.get("data", ""),
-                "summary": document.get("resumo", ""),
-                "tags": document.get("tags", []),
-                "body": document.content,
-            }
-        )
-    return sorted(posts, key=lambda post: str(post["date"]), reverse=True)

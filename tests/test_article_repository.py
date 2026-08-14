@@ -1,8 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import event
 
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, engine
 from app.models import Article, Category, Tag
 from app.repositories import articles as article_repository
 
@@ -241,6 +242,151 @@ def test_list_published_by_section_orders_by_publication_then_id() -> None:
             "first-tie",
             "older",
         ]
+
+
+def test_list_recent_published_blog_filters_orders_and_limits_in_sql() -> None:
+    older = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    newest = older + timedelta(days=1)
+    with SessionLocal() as db:
+        first_tie = Article(
+            title="First home tie",
+            slug="first-home-tie",
+            summary="First Blog row at the newest timestamp.",
+            content_markdown="# First home tie",
+            section="blog",
+            status="published",
+            published_at=newest,
+            category=Category(name="Home", slug="home"),
+            tags=[Tag(name="Recent", slug="recent")],
+        )
+        second_tie = Article(
+            title="Second home tie",
+            slug="second-home-tie",
+            summary="Second Blog row at the newest timestamp.",
+            content_markdown="# Second home tie",
+            section="blog",
+            status="published",
+            published_at=newest,
+        )
+        db.add_all(
+            [
+                first_tie,
+                second_tie,
+                Article(
+                    title="Older home article",
+                    slug="older-home-article",
+                    summary="An older published Blog Article.",
+                    content_markdown="# Older home article",
+                    section="blog",
+                    status="published",
+                    published_at=older,
+                ),
+                Article(
+                    title="Home draft",
+                    slug="home-draft",
+                    summary="A draft must stay private.",
+                    content_markdown="# Home draft",
+                    section="blog",
+                    status="draft",
+                ),
+                Article(
+                    title="Withdrawn home draft",
+                    slug="withdrawn-home-draft",
+                    summary="Publication history must not make a draft public.",
+                    content_markdown="# Withdrawn home draft",
+                    section="blog",
+                    status="draft",
+                    published_at=newest,
+                ),
+                Article(
+                    title="Journal excluded from home",
+                    slug="journal-excluded-from-home",
+                    summary="The Home Blog block does not mix sections.",
+                    content_markdown="# Journal excluded from home",
+                    section="journal",
+                    status="published",
+                    published_at=newest,
+                ),
+            ]
+        )
+        db.commit()
+
+    statements: list[str] = []
+
+    def record_statement(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record_statement)
+    try:
+        with SessionLocal() as db:
+            found = article_repository.list_recent_published_blog(db, limit=2)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_statement)
+
+    assert [article.slug for article in found] == [
+        "second-home-tie",
+        "first-home-tie",
+    ]
+    assert len(statements) == 1
+
+
+def test_list_published_section_slugs_excludes_private_articles() -> None:
+    publication = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    with SessionLocal() as db:
+        db.add_all(
+            [
+                Article(
+                    title="Published Blog sitemap entry",
+                    slug="same-sitemap-slug",
+                    summary="Published in the Blog namespace.",
+                    content_markdown="# Published Blog sitemap entry",
+                    section="blog",
+                    status="published",
+                    published_at=publication,
+                ),
+                Article(
+                    title="Published Journal sitemap entry",
+                    slug="same-sitemap-slug",
+                    summary="Published in the Journal namespace.",
+                    content_markdown="# Published Journal sitemap entry",
+                    section="journal",
+                    status="published",
+                    published_at=publication,
+                ),
+                Article(
+                    title="Sitemap draft",
+                    slug="sitemap-draft",
+                    summary="A draft must stay out of the sitemap.",
+                    content_markdown="# Sitemap draft",
+                    section="blog",
+                    status="draft",
+                ),
+                Article(
+                    title="Withdrawn sitemap draft",
+                    slug="withdrawn-sitemap-draft",
+                    summary="A withdrawn draft must stay out of the sitemap.",
+                    content_markdown="# Withdrawn sitemap draft",
+                    section="journal",
+                    status="draft",
+                    published_at=publication,
+                ),
+            ]
+        )
+        db.commit()
+
+        found = article_repository.list_published_section_slugs(db)
+
+    assert found == [
+        ("blog", "same-sitemap-slug"),
+        ("journal", "same-sitemap-slug"),
+    ]
 
 
 def test_get_published_by_slug_requires_published_status_and_section() -> None:

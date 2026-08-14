@@ -31,8 +31,11 @@ temporariamente desabilitada até existir arquivamento e restauração seguros.
 - testes básicos;
 - seed do primeiro projeto: **Rennam Semantic Docs**.
 
-O blog permanece baseado em arquivos Markdown nesta fase. Upload de imagens,
-editor visual, múltiplos usuários e agendamento não fazem parte do MVP.
+No trabalho em andamento da v0.4, Blog e Diário de Engenharia usam Articles no
+PostgreSQL como fonte pública. Os arquivos em `content/blog/` permanecem somente
+como entrada do importador operacional legado; o runtime público não os consulta.
+Upload de imagens, editor visual, múltiplos usuários e agendamento não fazem
+parte do MVP.
 
 ## Arquitetura
 
