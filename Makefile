@@ -16,7 +16,7 @@ run:
 	uvicorn app.main:app --reload
 
 test:
-	pytest -q
+	pytest -q -m no_database
 
 lint:
 	ruff check .

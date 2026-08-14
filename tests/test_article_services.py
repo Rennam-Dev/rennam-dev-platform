@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import event
@@ -419,6 +419,37 @@ def test_update_article_preserves_editorial_state_and_commits_once() -> None:
         assert {tag.slug for tag in updated.tags} == {"python", "postgresql"}
         assert transactions["commit"] == 1
         assert transactions["rollback"] == 0
+
+
+def test_update_article_advances_updated_at_when_only_tags_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with SessionLocal() as db:
+        article = article_service.create_article(db, make_article_form())
+        previous_updated_at = article.updated_at
+        previous_created_at = article.created_at
+        edited_at = previous_updated_at + timedelta(seconds=1)
+
+        class FixedDatetime:
+            @classmethod
+            def now(cls, tz: object) -> datetime:
+                assert tz is UTC
+                return edited_at
+
+        monkeypatch.setattr(article_service, "datetime", FixedDatetime)
+
+        updated = article_service.update_article(
+            db,
+            article,
+            make_article_form(tags="Python, PostgreSQL"),
+        )
+
+        assert updated.updated_at == edited_at
+        assert updated.updated_at > previous_updated_at
+        assert updated.updated_at.tzinfo is UTC
+        assert updated.created_at == previous_created_at
+        assert updated.published_at is None
+        assert {tag.slug for tag in updated.tags} == {"python", "postgresql"}
 
 
 def test_never_published_draft_can_change_slug_and_section() -> None:

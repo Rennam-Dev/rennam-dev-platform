@@ -23,6 +23,11 @@ O comando constrói `Dockerfile.test` com as dependências já declaradas em
 - não lê nem reutiliza `DATABASE_URL` ou `.env` da aplicação;
 - permanece em uma rede interna separada do Compose de desenvolvimento.
 
+`make test` executa somente os testes rápidos marcados como `no_database`, que
+são independentes de banco. `make verify` permanece como o gate oficial completo,
+com a suíte de integração executada em PostgreSQL. SQLite não deve ser tratado
+como substituto do PostgreSQL para testes de integração.
+
 É possível subir e destruir somente esse banco com:
 
 ```bash
@@ -44,8 +49,8 @@ O fluxo de `scripts/verify.sh` executa, nesta ordem:
 5. `upgrade head`, `alembic check`, `downgrade base` e novo `upgrade head`;
 6. `alembic current` para confirmar a revisão final.
 
-Os dois módulos de testes puros usam o marcador `no_database`, portanto não
-executam `create_all()` ou `drop_all()`. Antes da criação do engine, a suíte
+Os testes puros usam o marcador `no_database`, portanto não executam
+`create_all()` ou `drop_all()`. Antes da criação do engine, a suíte
 substitui explicitamente `DATABASE_URL` por `TEST_DATABASE_URL`. A mesma guarda
 é chamada imediatamente antes de todo DDL das fixtures e antes de cada comando
 Alembic no fluxo. Ela exige `APP_ENV=test`, rejeita a URL normal, arquivos

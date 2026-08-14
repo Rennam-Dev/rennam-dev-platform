@@ -253,6 +253,7 @@ def update_article(db: Session, article: Article, form: ArticleForm) -> Article:
             setattr(article, field, value)
         article.category = category
         article.tags = tags
+        article.updated_at = datetime.now(UTC)
         article_repository.flush(db)
         db.commit()
         return article
