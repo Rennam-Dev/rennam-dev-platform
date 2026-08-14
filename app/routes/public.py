@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.repositories import projects as project_repository
-from app.web import load_post, load_posts, public_context, templates
+from app.web import load_posts, public_context, templates
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -83,32 +83,6 @@ def project_detail(request: Request, slug: str, db: DBSession):
             project=project,
             status_labels=STATUS_LABELS,
         ),
-    )
-
-
-@router.get("/blog", response_class=HTMLResponse)
-def blog(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="public/blog.html",
-        context=public_context(request, "blog", posts=load_posts()),
-    )
-
-
-@router.get("/blog/{slug}", response_class=HTMLResponse)
-def post(request: Request, slug: str):
-    article = load_post(slug)
-    if article is None:
-        return templates.TemplateResponse(
-            request=request,
-            name="public/404.html",
-            context=public_context(request, "blog"),
-            status_code=404,
-        )
-    return templates.TemplateResponse(
-        request=request,
-        name="public/post.html",
-        context=public_context(request, "blog", article=article),
     )
 
 

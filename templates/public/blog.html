@@ -1,20 +1,29 @@
 {% extends "public/base.html" %}
-{% block title %}Blog — rennam.dev{% endblock %}
+{% block title %}{{ label }} — rennam.dev{% endblock %}
 {% block content %}
 <header class="page-header">
-  <p class="eyebrow">// build log</p>
-  <h1>Aprendizados, decisões e bugs honestos.</h1>
-  <p>Notas sobre o que estou construindo — incluindo a parte em que a documentação parece simples até o primeiro erro às 2h da manhã.</p>
+  <p class="eyebrow">{{ eyebrow }}</p>
+  <h1>{{ heading }}</h1>
+  <p>{{ intro }}</p>
 </header>
 <div class="post-list">
-  {% for post in posts %}
-    <a class="post-row" href="/blog/{{ post.slug }}">
-      <span>{{ post.date }}</span>
-      <div><strong>{{ post.title }}</strong><p>{{ post.summary }}</p></div>
+  {% for article in articles %}
+    <a class="post-row" href="{{ route_prefix }}/{{ article.slug }}">
+      <span>{{ article.published_at.strftime("%Y-%m-%d") }}</span>
+      <div>
+        <strong>{{ article.title }}</strong>
+        <p>{{ article.summary }}</p>
+        {% if article.category or article.tags %}
+        <div class="chips">
+          {% if article.category %}<span>{{ article.category.name }}</span>{% endif %}
+          {% for tag in article.tags %}<span>{{ tag.name }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
       <i>→</i>
     </a>
   {% else %}
-    <div class="empty-state"><p>Nenhuma nota publicada ainda.</p></div>
+    <div class="empty-state"><p>Nenhum artigo publicado ainda.</p></div>
   {% endfor %}
 </div>
 {% endblock %}

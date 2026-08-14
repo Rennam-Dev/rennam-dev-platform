@@ -6,7 +6,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.core.config import BASE_DIR, settings
 from app.core.http import SecurityHeadersMiddleware
 from app.core.logging import configure_auth_logging
-from app.routes import admin, admin_articles, public
+from app.routes import admin, admin_articles, articles, public
 
 
 def create_app() -> FastAPI:
@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
         "/static", StaticFiles(directory=BASE_DIR / "static"), name="static"
     )
     application.include_router(public.router)
+    application.include_router(articles.router)
     application.include_router(admin.router)
     application.include_router(admin_articles.router)
     return application

@@ -813,7 +813,7 @@ def test_service_error_redisplay_uses_controlled_values(
     assert 'name="tags" value="Conflicting, Tags"' in response.text
 
 
-def test_m44_does_not_expose_sql_articles_or_preview_publicly(client) -> None:
+def test_m45_does_not_expose_draft_articles_or_preview_publicly(client) -> None:
     login(client)
     article_id = create_article(client)
     sitemap = client.get("/sitemap.xml")
@@ -823,4 +823,6 @@ def test_m44_does_not_expose_sql_articles_or_preview_publicly(client) -> None:
     assert "/admin/" not in sitemap.text
     assert client.get("/blog").status_code == 200
     assert client.get("/blog/admin-article").status_code == 404
-    assert client.get("/journal").status_code == 404
+    journal = client.get("/journal")
+    assert journal.status_code == 200
+    assert "Admin Article" not in journal.text

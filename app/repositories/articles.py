@@ -44,6 +44,42 @@ def get_by_section_slug(db: Session, section: str, slug: str) -> Article | None:
     return db.scalar(statement)
 
 
+def list_published_by_section(db: Session, section: str) -> list[Article]:
+    statement = (
+        select(Article)
+        .where(
+            Article.section == section,
+            Article.status == "published",
+        )
+        .options(
+            selectinload(Article.category),
+            selectinload(Article.tags),
+        )
+        .order_by(Article.published_at.desc(), Article.id.desc())
+    )
+    return list(db.scalars(statement))
+
+
+def get_published_by_slug(
+    db: Session,
+    section: str,
+    slug: str,
+) -> Article | None:
+    statement = (
+        select(Article)
+        .where(
+            Article.section == section,
+            Article.status == "published",
+            Article.slug == slug,
+        )
+        .options(
+            selectinload(Article.category),
+            selectinload(Article.tags),
+        )
+    )
+    return db.scalar(statement)
+
+
 def get_category_by_id(db: Session, category_id: int) -> Category | None:
     return db.get(Category, category_id)
 

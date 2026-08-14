@@ -1,14 +1,22 @@
 {% extends "public/base.html" %}
 {% block title %}{{ article.title }} — rennam.dev{% endblock %}
 {% block description %}{{ article.summary }}{% endblock %}
+{% block og_title %}{{ article.title }}{% endblock %}
+{% block og_description %}{{ article.summary }}{% endblock %}
 {% block content %}
 <article class="article">
   <header class="page-header">
-    <a class="back-link" href="/blog">← blog</a>
-    <p class="eyebrow">{{ article.date }}</p>
+    <a class="back-link" href="{{ route_prefix }}">← {{ label | lower }}</a>
+    <p class="eyebrow">{{ article.published_at.strftime("%Y-%m-%d") }}</p>
     <h1>{{ article.title }}</h1>
     <p>{{ article.summary }}</p>
+    {% if article.category or article.tags %}
+    <div class="chips">
+      {% if article.category %}<span>{{ article.category.name }}</span>{% endif %}
+      {% for tag in article.tags %}<span>{{ tag.name }}</span>{% endfor %}
+    </div>
+    {% endif %}
   </header>
-  <div class="prose article__body">{{ article.body | markdown }}</div>
+  <div class="prose article__body">{{ article.content_markdown | markdown }}</div>
 </article>
 {% endblock %}

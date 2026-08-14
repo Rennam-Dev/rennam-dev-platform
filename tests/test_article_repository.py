@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from app.core.database import SessionLocal
@@ -152,3 +154,180 @@ def test_caller_can_commit_article_category_and_tag() -> None:
         assert persisted.category is not None
         assert persisted.category.slug == "cms"
         assert {item.slug for item in persisted.tags} == {"markdown"}
+
+
+def test_list_published_by_section_filters_status_and_section() -> None:
+    publication = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    with SessionLocal() as db:
+        db.add_all(
+            [
+                make_article(slug="blog-draft", section="blog"),
+                Article(
+                    title="Withdrawn Blog",
+                    slug="withdrawn-blog",
+                    summary="A draft with publication history stays private.",
+                    content_markdown="# Withdrawn",
+                    section="blog",
+                    status="draft",
+                    published_at=publication,
+                ),
+                Article(
+                    title="Published Blog",
+                    slug="published-blog",
+                    summary="A public Blog article.",
+                    content_markdown="# Blog",
+                    section="blog",
+                    status="published",
+                    published_at=publication,
+                ),
+                Article(
+                    title="Published Journal",
+                    slug="published-journal",
+                    summary="A public Journal article.",
+                    content_markdown="# Journal",
+                    section="journal",
+                    status="published",
+                    published_at=publication,
+                ),
+            ]
+        )
+        db.commit()
+
+        blog = article_repository.list_published_by_section(db, "blog")
+        journal = article_repository.list_published_by_section(db, "journal")
+
+        assert [article.slug for article in blog] == ["published-blog"]
+        assert [article.slug for article in journal] == ["published-journal"]
+
+
+def test_list_published_by_section_orders_by_publication_then_id() -> None:
+    older = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    newest = older + timedelta(days=1)
+    with SessionLocal() as db:
+        first_tie = Article(
+            title="First tie",
+            slug="first-tie",
+            summary="First row at the newest timestamp.",
+            content_markdown="# First tie",
+            section="blog",
+            status="published",
+            published_at=newest,
+        )
+        second_tie = Article(
+            title="Second tie",
+            slug="second-tie",
+            summary="Second row at the newest timestamp.",
+            content_markdown="# Second tie",
+            section="blog",
+            status="published",
+            published_at=newest,
+        )
+        older_article = Article(
+            title="Older",
+            slug="older",
+            summary="An older article.",
+            content_markdown="# Older",
+            section="blog",
+            status="published",
+            published_at=older,
+        )
+        db.add_all([first_tie, second_tie, older_article])
+        db.commit()
+
+        found = article_repository.list_published_by_section(db, "blog")
+
+        assert [article.slug for article in found] == [
+            "second-tie",
+            "first-tie",
+            "older",
+        ]
+
+
+def test_get_published_by_slug_requires_published_status_and_section() -> None:
+    publication = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    with SessionLocal() as db:
+        blog = Article(
+            title="Blog namespace",
+            slug="same-public-slug",
+            summary="Published in Blog.",
+            content_markdown="# Blog",
+            section="blog",
+            status="published",
+            published_at=publication,
+        )
+        journal = Article(
+            title="Journal namespace",
+            slug="same-public-slug",
+            summary="Published in Journal.",
+            content_markdown="# Journal",
+            section="journal",
+            status="published",
+            published_at=publication,
+        )
+        withdrawn = Article(
+            title="Withdrawn",
+            slug="withdrawn",
+            summary="Publication history must not make this public.",
+            content_markdown="# Withdrawn",
+            section="blog",
+            status="draft",
+            published_at=publication,
+        )
+        db.add_all([blog, journal, withdrawn])
+        db.commit()
+
+        found_blog = article_repository.get_published_by_slug(
+            db, "blog", "same-public-slug"
+        )
+        found_journal = article_repository.get_published_by_slug(
+            db, "journal", "same-public-slug"
+        )
+
+        assert found_blog is not None
+        assert found_blog.id == blog.id
+        assert found_journal is not None
+        assert found_journal.id == journal.id
+        assert (
+            article_repository.get_published_by_slug(db, "blog", "withdrawn")
+            is None
+        )
+        assert (
+            article_repository.get_published_by_slug(
+                db, "journal", "blog-only-missing"
+            )
+            is None
+        )
+
+
+def test_public_queries_eager_load_category_and_tags() -> None:
+    publication = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    with SessionLocal() as db:
+        category = Category(name="Public Engineering", slug="public-engineering")
+        tag = Tag(name="Public SQL", slug="public-sql")
+        article = Article(
+            title="Public relationships",
+            slug="public-relationships",
+            summary="Relationships remain usable after the session closes.",
+            content_markdown="# Public relationships",
+            section="blog",
+            status="published",
+            published_at=publication,
+            category=category,
+            tags=[tag],
+        )
+        db.add(article)
+        db.commit()
+
+    with SessionLocal() as db:
+        listed = article_repository.list_published_by_section(db, "blog")
+        detailed = article_repository.get_published_by_slug(
+            db, "blog", "public-relationships"
+        )
+
+    assert listed[0].category is not None
+    assert listed[0].category.slug == "public-engineering"
+    assert {tag.slug for tag in listed[0].tags} == {"public-sql"}
+    assert detailed is not None
+    assert detailed.category is not None
+    assert detailed.category.slug == "public-engineering"
+    assert {tag.slug for tag in detailed.tags} == {"public-sql"}

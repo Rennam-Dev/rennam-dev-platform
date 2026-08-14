@@ -1,6 +1,9 @@
 import re
 import unicodedata
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -38,6 +41,27 @@ class CategoryError(ValueError):
     pass
 
 
+class ArticleImportError(ValueError):
+    pass
+
+
+class ArticleImportConflictError(ArticleImportError):
+    pass
+
+
+@dataclass(frozen=True)
+class PublishedArticleImport:
+    title: str
+    slug: str
+    summary: str
+    content_markdown: str
+    section: str
+    category_name: str
+    category_slug: str
+    tags: tuple[str, ...]
+    published_at: datetime
+
+
 def slugify(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
@@ -53,10 +77,15 @@ def parse_tags(raw: str) -> list[str]:
     return list(unique.values())
 
 
-def prepare_tags(raw: str) -> list[tuple[str, str]]:
+def prepare_tag_names(names: Iterable[str]) -> list[tuple[str, str]]:
     prepared: list[tuple[str, str]] = []
     names_by_slug: dict[str, str] = {}
-    for name in parse_tags(raw):
+    unique_names: dict[str, str] = {}
+    for raw_name in names:
+        name = raw_name.strip()
+        if name:
+            unique_names.setdefault(name.casefold(), name)
+    for name in unique_names.values():
         if len(name) > 80:
             raise ArticleTagError(
                 "tags: cada nome deve ter no máximo 80 caracteres."
@@ -77,6 +106,10 @@ def prepare_tags(raw: str) -> list[tuple[str, str]]:
         names_by_slug[tag_slug] = name
         prepared.append((name, tag_slug))
     return prepared
+
+
+def prepare_tags(raw: str) -> list[tuple[str, str]]:
+    return prepare_tag_names(parse_tags(raw))
 
 
 def _get_category(db: Session, category_id: int | None) -> Category | None:
@@ -154,6 +187,147 @@ def _validate_publication_preconditions(article: Article) -> None:
             raise ArticlePublicationError(
                 f"{field}: campo obrigatório para publicação."
             )
+
+
+def _normalize_aware_utc(value: datetime, field: str) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ArticleImportError(f"{field}: informe um timestamp com timezone.")
+    return value.astimezone(UTC)
+
+
+def _validate_import_payload(data: PublishedArticleImport) -> None:
+    text_limits = (
+        ("title", data.title, 180),
+        ("slug", data.slug, 120),
+        ("summary", data.summary, 320),
+        ("content_markdown", data.content_markdown, 200_000),
+        ("category_name", data.category_name, 80),
+        ("category_slug", data.category_slug, 80),
+    )
+    for field, value, limit in text_limits:
+        if not value or not value.strip():
+            raise ArticleImportError(f"{field}: campo obrigatório na importação.")
+        if len(value) > limit:
+            raise ArticleImportError(
+                f"{field}: deve ter no máximo {limit} caracteres."
+            )
+    if data.section not in {"blog", "journal"}:
+        raise ArticleImportError("section: seção inválida na importação.")
+    slug_pattern = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    if re.fullmatch(slug_pattern, data.slug) is None:
+        raise ArticleImportError("slug: formato inválido na importação.")
+    if re.fullmatch(slug_pattern, data.category_slug) is None:
+        raise ArticleImportError("category_slug: formato inválido na importação.")
+    if slugify(data.category_name) != data.category_slug:
+        raise ArticleImportError(
+            "category_slug: não corresponde ao nome determinístico da categoria."
+        )
+
+
+def _published_at_matches(
+    actual: datetime | None,
+    expected: datetime,
+) -> bool:
+    if actual is None or actual.tzinfo is None or actual.utcoffset() is None:
+        return False
+    return actual.astimezone(UTC) == expected
+
+
+def _matches_published_import(
+    article: Article,
+    data: PublishedArticleImport,
+    published_at: datetime,
+    tag_data: list[tuple[str, str]],
+) -> bool:
+    category_matches = (
+        article.category is not None
+        and article.category.slug == data.category_slug
+        and article.category.name.casefold() == data.category_name.casefold()
+    )
+    actual_tag_slugs = {tag.slug.casefold() for tag in article.tags}
+    expected_tag_slugs = {tag_slug.casefold() for _name, tag_slug in tag_data}
+    return (
+        article.title == data.title
+        and article.summary == data.summary
+        and article.content_markdown == data.content_markdown
+        and article.section == data.section
+        and article.status == "published"
+        and category_matches
+        and actual_tag_slugs == expected_tag_slugs
+        and _published_at_matches(article.published_at, published_at)
+    )
+
+
+def import_published_article(
+    db: Session,
+    data: PublishedArticleImport,
+    *,
+    now: datetime | None = None,
+) -> Literal["created", "unchanged"]:
+    """Import one published Article and its taxonomy in a single transaction."""
+    _validate_import_payload(data)
+    published_at = _normalize_aware_utc(data.published_at, "published_at")
+    current_time = _normalize_aware_utc(now or datetime.now(UTC), "now")
+    if published_at > current_time:
+        raise ArticleImportError(
+            "published_at: data futura não é permitida na importação."
+        )
+    try:
+        tag_data = prepare_tag_names(data.tags)
+    except ArticleTagError as error:
+        raise ArticleImportError(str(error)) from None
+    existing = article_repository.get_by_section_slug(db, data.section, data.slug)
+    if existing is not None:
+        if _matches_published_import(existing, data, published_at, tag_data):
+            return "unchanged"
+        if db.in_transaction():
+            db.rollback()
+        raise ArticleImportConflictError(
+            "o Article existente diverge do conteúdo legado; corrija-o manualmente."
+        )
+
+    try:
+        category = article_repository.get_category_by_slug(db, data.category_slug)
+        if category is None:
+            category = Category(name=data.category_name, slug=data.category_slug)
+            article_repository.add_category(db, category)
+        elif category.name.casefold() != data.category_name.casefold():
+            raise ArticleImportConflictError(
+                "a Category existente diverge da categoria legada esperada."
+            )
+
+        tags, new_tags = _resolve_tags(db, tag_data)
+        _add_new_tags(db, new_tags)
+        article = Article(
+            title=data.title,
+            slug=data.slug,
+            summary=data.summary,
+            content_markdown=data.content_markdown,
+            section=data.section,
+            status="published",
+            published_at=published_at,
+            category=category,
+            tags=tags,
+        )
+        article_repository.add_article(db, article)
+        article_repository.flush(db)
+        db.commit()
+        return "created"
+    except ArticleImportError:
+        if db.in_transaction():
+            db.rollback()
+        raise
+    except ArticleTagError as error:
+        db.rollback()
+        raise ArticleImportConflictError(str(error)) from None
+    except IntegrityError:
+        db.rollback()
+        raise ArticleImportConflictError(
+            "conflito de persistência durante a importação do Article."
+        ) from None
+    except Exception:
+        db.rollback()
+        raise
 
 
 def publish_article(db: Session, article: Article) -> Article:

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import bleach
 import frontmatter
 import markdown
@@ -74,18 +72,3 @@ def load_posts() -> list[dict]:
             }
         )
     return sorted(posts, key=lambda post: str(post["date"]), reverse=True)
-
-
-def load_post(slug: str) -> dict | None:
-    path = Path(BASE_DIR / "content" / "blog" / f"{slug}.md")
-    if not path.exists() or not path.is_file():
-        return None
-    document = frontmatter.load(path)
-    return {
-        "slug": slug,
-        "title": document.get("titulo", slug),
-        "date": document.get("data", ""),
-        "summary": document.get("resumo", ""),
-        "tags": document.get("tags", []),
-        "body": document.content,
-    }
